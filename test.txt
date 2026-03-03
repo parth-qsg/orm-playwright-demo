@@ -1,0 +1,13 @@
+Test Case: Verify Admin can access Maintenance → Administrator Access
+Navigate to https://opensource-demo.orangehrmlive.com/web/index.php/auth/login.
+Enter Username: Admin.
+Enter Password: admin123.
+Click on the Login button.
+Verify that the Dashboard heading is displayed.
+Click on the Maintenance link from the menu.
+Verify that the Administrator Access heading is displayed.
+Verify that a toast message is displayed with the text:
+"You have requested to access a critical Administrator function in OrangeHRM and are required to validate your credentials below".
+Enter Password: admin123 in the password field.
+Click on the Confirm button.
+Verify that the page displays the text "Purge Employee Records".

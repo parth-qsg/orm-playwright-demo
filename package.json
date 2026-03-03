@@ -1,0 +1,24 @@
+{
+  "name": "orm-playwright-demo",
+  "version": "1.0.0",
+  "description": "Playwright demo project for OrangeHRM application",
+  "main": "index.js",
+  "scripts": {
+    "test:demo": "cross-env ENVIRONMENT=demo npx playwright test --headed",
+    "test:demo:smoke": "cross-env ENVIRONMENT=demo TAGS=@smoke npx playwright test --headed",
+    "test:demo:new": "cross-env ENVIRONMENT=demo TAGS=@new npx playwright test --headed",
+    "test:demo:debug": "cross-env ENVIRONMENT=demo npx playwright test --debug",
+    "test:demo:codegen": "cross-env ENVIRONMENT=demo npx playwright codegen",
+    "report": "npx playwright show-report"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@faker-js/faker": "^10.0.0",
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^24.3.0",
+    "cross-env": "^10.1.0",
+    "dotenv": "^17.2.2"
+  }
+}
