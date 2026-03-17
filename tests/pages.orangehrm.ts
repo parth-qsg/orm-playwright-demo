@@ -51,7 +51,17 @@ export class OrangeHrmAdminSystemUsersPage {
   }
 
   private get recordsFoundText(): Locator {
-    return this.page.getByText(/\(\d+\) Record(s)? Found/);
+    // Some OrangeHRM builds show "(N) Records Found"; others only show an empty state.
+    return this.page.getByText(/\(\d+\) Record(s)? Found/i);
+  }
+
+  private get noRecordsFoundText(): Locator {
+    return this.page.getByText(/No Records Found/i);
+  }
+
+  private get resultsTableRows(): Locator {
+    // When there are no results, the table exists but has no data rows in the rowgroup.
+    return this.resultsTable.getByRole('row');
   }
 
   private get resultsTable(): Locator {
@@ -83,6 +93,15 @@ export class OrangeHrmAdminSystemUsersPage {
 
   async assertRecordFoundCount(expected: number): Promise<void> {
     await expect(this.recordsFoundText).toContainText(`(${expected})`);
+  }
+
+  async assertNoRecordsFound(): Promise<void> {
+    // Prefer asserting the explicit empty-state message.
+    await expect(this.noRecordsFoundText).toBeVisible();
+
+    // Also assert the results table is effectively empty.
+    // (Header rows may not be exposed in the accessibility tree; the rowgroup is present with no rows.)
+    await expect(this.resultsTableRows).toHaveCount(0);
   }
 
   async assertExactlyOneUsernameResult(expectedUsername: string): Promise<void> {
