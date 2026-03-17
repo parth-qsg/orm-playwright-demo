@@ -1,5 +1,10 @@
 import { expect, Locator, Page } from '@playwright/test';
 
+export interface SearchPerformanceAssertionParams {
+  maxMs: number;
+  elapsedMs: number;
+}
+
 export interface OrangeHrmCredentials {
   username: string;
   password: string;
@@ -122,8 +127,10 @@ export class OrangeHrmAdminSystemUsersPage {
     return this.page.getByText(/\(\d+\) Record(s)? Found/i);
   }
 
-  private get noRecordsFoundText(): Locator {
-    return this.page.getByText(/No Records Found/i);
+  private get noRecordsFoundTableEmptyStateText(): Locator {
+    // OrangeHRM can show "No Records Found" in the table empty state AND as a toast.
+    // Use a more specific locator to avoid strict-mode violations.
+    return this.page.locator('span').filter({ hasText: 'No Records Found' }).first();
   }
 
   async goto(): Promise<void> {
@@ -159,7 +166,7 @@ export class OrangeHrmAdminSystemUsersPage {
 
   async assertNoRecordsFound(): Promise<void> {
     // Prefer asserting the explicit empty-state message.
-    await expect(this.noRecordsFoundText).toBeVisible();
+    await expect(this.noRecordsFoundTableEmptyStateText).toBeVisible();
 
     // Also assert the results table is effectively empty.
     // (Header rows may not be exposed in the accessibility tree; the rowgroup is present with no rows.)
@@ -178,7 +185,7 @@ export class OrangeHrmAdminSystemUsersPage {
     await expect(this.firstResultUsernameCell).toBeVisible();
   }
 
-  async assertSearchCompletedWithinMs(maxMs: number, elapsedMs: number): Promise<void> {
+  async assertSearchCompletedWithinMs({ maxMs, elapsedMs }: SearchPerformanceAssertionParams): Promise<void> {
     await this.waitForResultsToLoad();
     expect(elapsedMs).toBeLessThanOrEqual(maxMs);
   }

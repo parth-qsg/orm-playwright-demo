@@ -8,10 +8,12 @@ test.describe('Admin - System Users', () => {
 
     // Arrange: open login page and authenticate
     await loginPage.goto();
+    await loginPage.assertOnLoginPage();
     await loginPage.login(process.env.ADMIN_USERNAME ?? 'Admin', process.env.ADMIN_PASSWORD ?? 'admin123');
 
     // Arrange: open System Users page
     await systemUsersPage.goto();
+    await systemUsersPage.assertOnSystemUsersPage();
 
     // Act: search with lowercase username
     await systemUsersPage.searchByUsername('admin');
@@ -19,7 +21,7 @@ test.describe('Admin - System Users', () => {
     // Assert: Admin is returned
     await systemUsersPage.assertExactlyOneUsernameResult('Admin');
 
-    // Act: search with uppercase username
+    // Act: clear and search with uppercase username
     await systemUsersPage.searchByUsername('ADMIN');
 
     // Assert: Admin is returned
