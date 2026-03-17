@@ -8,13 +8,13 @@ test.describe('Admin - System Users', () => {
 
     // Arrange: ensure no active authenticated session
     await page.context().clearCookies();
-    await page.evaluate(() => window.localStorage.clear());
-    await page.evaluate(() => window.sessionStorage.clear());
 
-    // Act: attempt to open System Users directly without logging in
-    await systemUsersPage.goto();
-
-    // Assert: user is redirected to login page (should not stay on System Users)
+    // Act + Assert: attempt to open System Users directly without logging in; expect login redirect
+    await page.goto(
+      process.env.ORANGEHRM_BASE_URL
+        ? `${process.env.ORANGEHRM_BASE_URL}/web/index.php/admin/viewSystemUsers`
+        : 'https://opensource-demo.orangehrmlive.com/web/index.php/admin/viewSystemUsers',
+    );
     await loginPage.assertOnLoginPage();
 
     // Act: login with valid admin credentials

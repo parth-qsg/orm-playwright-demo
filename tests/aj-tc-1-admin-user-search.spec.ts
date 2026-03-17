@@ -1,8 +1,8 @@
 import { test } from '@playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
 
-test.describe('Admin - System Users - Performance', () => {
-  test('AJ-TC-5 - Search by Username Admin completes within 2000 ms', async ({ page }) => {
+test.describe('Admin - System Users', () => {
+  test('AJ-TC-1 - Verify successful user search returns exactly one Admin user', async ({ page }) => {
     const loginPage = new OrangeHrmLoginPage(page);
     const systemUsersPage = new OrangeHrmAdminSystemUsersPage(page);
 
@@ -15,12 +15,11 @@ test.describe('Admin - System Users - Performance', () => {
     await systemUsersPage.goto();
     await systemUsersPage.assertOnSystemUsersPage();
 
-    // Act: search by username "Admin" and record duration
-    const start = Date.now();
+    // Act: search by username "Admin"
     await systemUsersPage.searchByUsername('Admin');
-    const elapsedMs = Date.now() - start;
 
-    // Assert: results are displayed and the search completes within 2000ms
-    await systemUsersPage.assertSearchCompletedWithinMs({ maxMs: 2000, elapsedMs });
+    // Assert: exactly one record is returned and username is Admin
+    await systemUsersPage.assertRecordFoundCount(1);
+    await systemUsersPage.assertExactlyOneUsernameResult('Admin');
   });
 });
