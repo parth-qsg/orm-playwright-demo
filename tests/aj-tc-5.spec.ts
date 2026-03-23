@@ -20,9 +20,12 @@ test.describe('AJ-TC-5 - Search performance (Username = Admin)', () => {
     await systemUsersPage.goto();
     await systemUsersPage.assertOnSystemUsersPage();
 
-    // Act: Search by Username and record elapsed time for results to render
+    // Act: Search by Username and record elapsed time until results render
     const startMs: number = Date.now();
     await systemUsersPage.searchByUsername(searchUsername);
+
+    // Ensure results are rendered before stopping the timer.
+    await systemUsersPage.waitForResultsToLoad();
     const elapsedMs: number = Date.now() - startMs;
 
     // Assert: Results are displayed and load within the acceptable time threshold

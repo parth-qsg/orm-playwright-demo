@@ -89,14 +89,9 @@ export class OrangeHrmAdminSystemUsersPage {
     return /\/web\/index\.php\/admin\/viewSystemUsers/;
   }
 
-  private get filterToggleButton(): Locator {
-    // The icon button at the right of the "System Users" header that expands the filter form.
-    return this.page.getByRole('button').filter({ hasText: '' }).nth(2);
-  }
-
   private get usernameFilterTextbox(): Locator {
-    // After expanding filters, the Username field is exposed as an unnamed textbox.
-    // Snapshot confirmed this resolves to the correct field.
+    // System Users filter form: the Username input is present in the filter form.
+    // A11y snapshot shows it's an unnamed textbox adjacent to the "Username" label.
     return this.page.locator('label', { hasText: 'Username' }).locator('xpath=following::input[1]');
   }
 
@@ -148,9 +143,7 @@ export class OrangeHrmAdminSystemUsersPage {
   }
 
   async expandFilters(): Promise<void> {
-    // If already expanded, the username filter textbox should be visible.
-    if (await this.usernameFilterTextbox.isVisible().catch(() => false)) return;
-    await this.filterToggleButton.click();
+    // Current OrangeHRM demo renders the filters expanded by default.
     await expect(this.usernameFilterTextbox).toBeVisible();
   }
 
@@ -158,6 +151,17 @@ export class OrangeHrmAdminSystemUsersPage {
     await this.expandFilters();
     await this.usernameFilterTextbox.fill(username);
     await this.searchButton.click();
+  }
+
+  async clearUsernameSearch(): Promise<void> {
+    await this.expandFilters();
+    await expect(this.usernameFilterTextbox).toBeVisible();
+    await this.usernameFilterTextbox.clear();
+  }
+
+  async assertUsernameFilterValue(expected: string): Promise<void> {
+    await this.expandFilters();
+    await expect(this.usernameFilterTextbox).toHaveValue(expected);
   }
 
   async assertRecordFoundCount(expected: number): Promise<void> {
