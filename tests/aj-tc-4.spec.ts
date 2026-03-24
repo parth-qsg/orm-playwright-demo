@@ -15,7 +15,6 @@ test.describe('AJ-TC-4 - Admin - System Users - Username search is case-insensit
     await loginPage.login(username, password);
 
     // Arrange: Navigate to Admin > System Users
-    // (Use direct navigation for stability; the left menu click can be intercepted by dashboard widgets.)
     await systemUsersPage.goto();
     await systemUsersPage.assertOnSystemUsersPage();
 
