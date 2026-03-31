@@ -37,6 +37,11 @@ export class OrangeHrmLoginPage {
     return this.page.getByRole('alert').getByText(/Invalid credentials/i);
   }
 
+  private get passwordRequiredValidationText(): Locator {
+    // When password is empty and user attempts login, OrangeHRM shows an inline "Required" message.
+    return this.page.getByText('Required');
+  }
+
   async goto(): Promise<void> {
     await this.page.goto(
       process.env.ORANGEHRM_BASE_URL
@@ -75,6 +80,10 @@ export class OrangeHrmLoginPage {
 
   async assertInvalidCredentialsErrorVisible(): Promise<void> {
     await expect(this.invalidCredentialsAlert).toBeVisible();
+  }
+
+  async assertPasswordRequiredVisible(): Promise<void> {
+    await expect(this.passwordRequiredValidationText).toBeVisible();
   }
 }
 
