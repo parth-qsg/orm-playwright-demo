@@ -11,7 +11,7 @@ export interface OrangeHrmCredentials {
 }
 
 export class OrangeHrmLoginPage {
-  constructor(private readonly page: Page) {}
+  constructor(protected readonly page: Page) {}
 
   private get loginUrlRegex(): RegExp {
     return /\/web\/index\.php\/auth\/login/;
@@ -21,16 +21,22 @@ export class OrangeHrmLoginPage {
     return this.page.getByRole('heading', { name: 'Login' });
   }
 
-  private get usernameTextbox(): Locator {
+  protected get usernameTextbox(): Locator {
     return this.page.getByRole('textbox', { name: 'Username' });
   }
 
-  private get passwordTextbox(): Locator {
+  protected get passwordTextbox(): Locator {
     return this.page.getByRole('textbox', { name: 'Password' });
   }
 
-  private get loginButton(): Locator {
+  protected get loginButton(): Locator {
     return this.page.getByRole('button', { name: 'Login' });
+  }
+
+  async clickLogin(): Promise<void> {
+    await expect(this.loginButton).toBeVisible();
+    await expect(this.loginButton).toBeEnabled();
+    await this.loginButton.click();
   }
 
   private get invalidCredentialsAlert(): Locator {
@@ -64,6 +70,16 @@ export class OrangeHrmLoginPage {
     await this.passwordTextbox.fill(password);
     await this.loginButton.click();
     await expect(this.page).toHaveURL(/\/web\/index\.php\/dashboard\/index/);
+  }
+
+  async fillPassword(password: string): Promise<void> {
+    await expect(this.passwordTextbox).toBeVisible();
+    await this.passwordTextbox.fill(password);
+  }
+
+  async assertPasswordInputHasTypePassword(): Promise<void> {
+    await expect(this.passwordTextbox).toBeVisible();
+    await expect(this.passwordTextbox).toHaveAttribute('type', 'password');
   }
 
   async loginExpectingFailure({ username, password }: OrangeHrmCredentials): Promise<void> {
