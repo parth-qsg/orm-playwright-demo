@@ -29,6 +29,28 @@ export class OrangeHrmLoginPage {
     return this.page.getByRole('textbox', { name: 'Password' });
   }
 
+  async assertUsernameTextboxVisible(): Promise<void> {
+    await expect(this.usernameTextbox).toBeVisible();
+  }
+
+  async assertPasswordTextboxVisible(): Promise<void> {
+    await expect(this.passwordTextbox).toBeVisible();
+  }
+
+  async assertPasswordInputIsMasked(): Promise<void> {
+    await expect(this.passwordTextbox).toHaveAttribute('type', 'password');
+  }
+
+  async fillPassword(password: string): Promise<void> {
+    await expect(this.passwordTextbox).toBeVisible();
+    await this.passwordTextbox.fill(password);
+  }
+
+  async assertPasswordInputRemainsMaskedAfterTyping(samplePassword: string): Promise<void> {
+    await this.fillPassword(samplePassword);
+    await this.assertPasswordInputIsMasked();
+  }
+
   private get loginButton(): Locator {
     return this.page.getByRole('button', { name: 'Login' });
   }
@@ -37,9 +59,22 @@ export class OrangeHrmLoginPage {
     return this.page.getByRole('alert').getByText(/Invalid credentials/i);
   }
 
+  private get usernameRequiredValidationText(): Locator {
+    return this.usernameFormGroup.getByText('Required');
+  }
+
   private get passwordRequiredValidationText(): Locator {
-    // When password is empty and user attempts login, OrangeHRM shows an inline "Required" message.
-    return this.page.getByText('Required');
+    return this.passwordFormGroup.getByText('Required');
+  }
+
+  private get usernameFormGroup(): Locator {
+    // Scope validation to the Username field container to avoid strict-mode conflicts.
+    return this.page.locator('div.oxd-input-group').filter({ has: this.usernameTextbox });
+  }
+
+  private get passwordFormGroup(): Locator {
+    // Scope validation to the Password field container to avoid strict-mode conflicts.
+    return this.page.locator('div.oxd-input-group').filter({ has: this.passwordTextbox });
   }
 
   async goto(): Promise<void> {
@@ -82,8 +117,46 @@ export class OrangeHrmLoginPage {
     await expect(this.invalidCredentialsAlert).toBeVisible();
   }
 
+  async clickLogin(): Promise<void> {
+    await expect(this.loginButton).toBeVisible();
+    await expect(this.loginButton).toBeEnabled();
+    await this.loginButton.click();
+  }
+
+  async assertUsernameRequiredVisible(): Promise<void> {
+    await expect(this.usernameRequiredValidationText).toBeVisible();
+    await expect(this.usernameRequiredValidationText).toHaveText('Required');
+  }
+
   async assertPasswordRequiredVisible(): Promise<void> {
     await expect(this.passwordRequiredValidationText).toBeVisible();
+    await expect(this.passwordRequiredValidationText).toHaveText('Required');
+  }
+}
+
+export class OrangeHrmDashboardPage {
+  constructor(private readonly page: Page) {}
+
+  private get dashboardUrlRegex(): RegExp {
+    return /\/web\/index\.php\/dashboard\/index/;
+  }
+
+  private get dashboardHeading(): Locator {
+    return this.page.getByRole('heading', { name: 'Dashboard' });
+  }
+
+  private get adminSideMenuLink(): Locator {
+    return this.page.getByRole('link', { name: 'Admin' });
+  }
+
+  async assertOnDashboardPage(): Promise<void> {
+    await expect(this.page).toHaveURL(this.dashboardUrlRegex);
+    await expect(this.dashboardHeading).toBeVisible();
+  }
+
+  async assertAdminMenuVisible(): Promise<void> {
+    await expect(this.adminSideMenuLink).toBeVisible();
+    await expect(this.adminSideMenuLink).toBeEnabled();
   }
 }
 
