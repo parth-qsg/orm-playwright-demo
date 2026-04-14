@@ -87,6 +87,11 @@ export class OrangeHrmLoginPage {
     return this.page.getByRole('button', { name: 'Login' });
   }
 
+  private get forgotYourPasswordText(): Locator {
+    // In OrangeHRM demo, this is rendered as a <p> with click handler (not a link).
+    return this.page.getByText('Forgot your password?');
+  }
+
   private get invalidCredentialsAlert(): Locator {
     return this.page.getByRole('alert').getByText(/Invalid credentials/i);
   }
@@ -123,6 +128,11 @@ export class OrangeHrmLoginPage {
     await expect(this.usernameTextbox).toBeVisible();
     await expect(this.passwordTextbox).toBeVisible();
     await expect(this.loginButton).toBeVisible();
+    await expect(this.forgotYourPasswordText).toBeVisible();
+  }
+
+  async assertForgotPasswordVisible(): Promise<void> {
+    await expect(this.forgotYourPasswordText).toBeVisible();
   }
 
   async login(username: string, password: string): Promise<void> {
