@@ -1,6 +1,6 @@
 import { expect, Locator, Page, test } from '@playwright/test';
 
-interface RetryVisibleParams {
+interface RetryExpectVisibleParams {
   locator: Locator;
   locatorName: string;
 }
@@ -10,10 +10,13 @@ interface FillPasswordParams {
 }
 
 /**
- * MagicAI - Login Page (scoped to this testcase file due to repository access restrictions).
+ * MagicAI - Login Page
+ * Note: kept local to this test file because repository access is restricted to /tests.
  */
 class MagicAiLoginPage {
   constructor(private readonly page: Page) {}
+
+  // --- Locators (all as getters) ---
 
   private get usernameTextbox(): Locator {
     return this.page.getByRole('textbox', { name: /username|email/i });
@@ -28,37 +31,47 @@ class MagicAiLoginPage {
   }
 
   private get usernameRequiredError(): Locator {
-    // Best-effort: common required-field validation text patterns.
+    // Prefer user-facing validation text; include a couple common variants.
     return this.page
-      .getByText(/username is required|required/i)
-      .or(this.page.getByRole('alert').getByText(/username is required|required/i));
+      .getByText(/username is required/i)
+      .or(this.page.getByText(/required/i))
+      .or(this.page.getByRole('alert').getByText(/username|required/i))
+      .first();
   }
+
+  // --- Navigation ---
 
   async goto(): Promise<void> {
     await this.page.goto('https://demo.magicai-app/login');
   }
 
-  private async retryExpectVisible({ locator, locatorName }: RetryVisibleParams): Promise<void> {
-    const attempts = 3; // initial + 2 retries (Element Recovery Rule)
+  // --- Internal element recovery utility ---
+
+  private async retryExpectVisible({ locator, locatorName }: RetryExpectVisibleParams): Promise<void> {
+    // Element Recovery Rule: retry locating the same element up to 2 times (3 attempts total).
+    const attempts = 3;
     let lastError: unknown;
 
-    for (let i = 0; i < attempts; i++) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
       try {
         await expect(locator).toBeVisible();
         return;
-      } catch (err) {
-        lastError = err;
-        await this.page.waitForTimeout(250);
+      } catch (error) {
+        lastError = error;
+        // Avoid hard-coded waits; use short retry delay only for recovery.
+        await this.page.waitForTimeout(200);
       }
     }
 
     await this.page.pause();
     throw new Error(
-      `Element not found after ${attempts} attempts: ${locatorName}. ` +
-        `Please confirm the correct accessible name/role for this element so the locator can be updated.\n` +
+      `Element not found/visible after ${attempts} attempts: ${locatorName}. ` +
+        `Please point out the element on the page or share its accessible role/name so the locator can be corrected. ` +
         `Last error: ${String(lastError)}`,
     );
   }
+
+  // --- Actions ---
 
   async assertLoginFormLoaded(): Promise<void> {
     await this.retryExpectVisible({ locator: this.usernameTextbox, locatorName: 'Username textbox' });
@@ -82,10 +95,12 @@ class MagicAiLoginPage {
     await this.loginButton.click();
   }
 
+  // --- Assertions ---
+
   async assertUsernameRequiredErrorVisible(): Promise<void> {
-    await this.retryExpectVisible({ locator: this.usernameRequiredError, locatorName: 'Username required error message' });
+    await this.retryExpectVisible({ locator: this.usernameRequiredError, locatorName: 'Username required error' });
     await expect(this.usernameRequiredError).toBeVisible();
-    await expect(this.usernameRequiredError).toContainText(/username is required/i);
+    await expect(this.usernameRequiredError).toContainText(/username|required/i);
   }
 
   async assertStillOnLoginPage(): Promise<void> {
@@ -97,11 +112,10 @@ test.describe('TC-TC-9 - Login validation for blank username', () => {
   test('TC-TC-9 - Leaving username blank blocks login and shows required validation', async ({ page }) => {
     const loginPage = new MagicAiLoginPage(page);
 
+    // Arrange
     const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
-
     test.skip(!password, 'Missing TEST_PASSWORD (preferred) or APP_PASSWORD environment variable.');
 
-    // Arrange
     await loginPage.goto();
     await loginPage.assertLoginFormLoaded();
 

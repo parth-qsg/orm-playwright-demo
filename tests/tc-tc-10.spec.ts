@@ -25,18 +25,23 @@ class MagicAiLoginPage {
   }
 
   private get passwordRequiredError(): Locator {
-    // Best-effort: common patterns for required field validation near the password field.
     return this.page
       .getByText(/password is required|required/i)
       .or(this.page.getByRole('alert').getByText(/password is required|required/i));
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('https://demo.magicai-app/login');
+    const baseUrl = process.env.BASE_URL;
+    if (!baseUrl) {
+      throw new Error('Missing BASE_URL env var (e.g., https://demo.magicai-app).');
+    }
+
+    await this.page.goto(new URL('/login', baseUrl).toString());
   }
 
   private async retryExpectVisible({ locator, locatorName }: RetryVisibleParams): Promise<void> {
-    const attempts = 3; // initial + 2 retries (Element Recovery Rule)
+    // Element Recovery Rule: retry locating the same element up to 2 times.
+    const attempts = 3; // initial + 2 retries
     let lastError: unknown;
 
     for (let i = 0; i < attempts; i++) {
@@ -45,7 +50,6 @@ class MagicAiLoginPage {
         return;
       } catch (err) {
         lastError = err;
-        await this.page.waitForTimeout(250);
       }
     }
 
@@ -95,7 +99,6 @@ test.describe('TC-TC-10 - Prevent submission when password is blank', () => {
     const loginPage = new MagicAiLoginPage(page);
 
     const username = process.env.TEST_USERNAME ?? process.env.APP_USERNAME;
-
     if (!username) {
       throw new Error('Missing username env var. Set TEST_USERNAME (preferred) or APP_USERNAME.');
     }
