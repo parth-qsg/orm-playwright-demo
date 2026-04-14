@@ -13,11 +13,15 @@ interface LoginParams {
 class MagicAiLoginPage {
   constructor(private readonly page: Page) {}
 
+  // --- Locators (all as getters) ---
+
   private get usernameTextbox(): Locator {
+    // Best-effort: common accessible names on login forms.
     return this.page.getByRole('textbox', { name: /username|email/i });
   }
 
   private get passwordTextbox(): Locator {
+    // Some apps use role=textbox even for password inputs.
     return this.page.getByRole('textbox', { name: /password/i });
   }
 
@@ -25,17 +29,24 @@ class MagicAiLoginPage {
     return this.page.getByRole('button', { name: /^login$/i });
   }
 
-  private get invalidCredentialsAlert(): Locator {
-    // Best-effort based on expected result text.
-    return this.page.getByRole('alert').or(this.page.getByRole('status')).getByText(/invalid credentials/i);
+  private get invalidCredentialsMessage(): Locator {
+    // Expected result: "Invalid credentials". Prefer announcement regions.
+    const alertOrStatus = this.page.getByRole('alert').or(this.page.getByRole('status'));
+    return alertOrStatus.getByText(/invalid credentials/i).or(this.page.getByText(/invalid credentials/i));
   }
+
+  // --- Navigation ---
 
   async goto(): Promise<void> {
-    await this.page.goto('https://demo.magicai-app/login');
+    const baseUrl = process.env.BASE_URL ?? process.env.APP_BASE_URL;
+    const loginUrl = baseUrl ? new URL('/login', baseUrl).toString() : 'https://demo.magicai-app/login';
+    await this.page.goto(loginUrl);
   }
 
+  // --- Resilience helpers (Element Recovery Rule) ---
+
   private async retryExpectVisible({ locator, locatorName }: RetryVisibleParams): Promise<void> {
-    const attempts = 3; // initial + 2 retries (Element Recovery Rule)
+    const attempts = 3; // initial + 2 retries
     let lastError: unknown;
 
     for (let i = 0; i < attempts; i++) {
@@ -44,17 +55,18 @@ class MagicAiLoginPage {
         return;
       } catch (err) {
         lastError = err;
-        await this.page.waitForTimeout(250);
       }
     }
 
     await this.page.pause();
     throw new Error(
       `Element not found after ${attempts} attempts: ${locatorName}. ` +
-        `Please confirm the correct role/name for this element so the locator can be updated.\n` +
+        `Please confirm the correct accessible role/name/text for this element so the locator can be updated.\n` +
         `Last error: ${String(lastError)}`,
     );
   }
+
+  // --- Actions ---
 
   async assertLoginFormReady(): Promise<void> {
     await this.retryExpectVisible({ locator: this.usernameTextbox, locatorName: 'Username textbox' });
@@ -89,14 +101,16 @@ class MagicAiLoginPage {
     await this.clickLogin();
   }
 
+  // --- Assertions (must remain in POM) ---
+
   async assertPasswordIsMasked(): Promise<void> {
     await this.retryExpectVisible({ locator: this.passwordTextbox, locatorName: 'Password textbox' });
     await expect(this.passwordTextbox).toHaveAttribute('type', 'password');
   }
 
   async assertInvalidCredentialsErrorVisible(): Promise<void> {
-    await this.retryExpectVisible({ locator: this.invalidCredentialsAlert, locatorName: 'Invalid credentials error message' });
-    await expect(this.invalidCredentialsAlert).toBeVisible();
+    await this.retryExpectVisible({ locator: this.invalidCredentialsMessage, locatorName: 'Invalid credentials message' });
+    await expect(this.invalidCredentialsMessage).toBeVisible();
   }
 
   async assertStillOnLoginPage(): Promise<void> {

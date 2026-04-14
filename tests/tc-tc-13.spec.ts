@@ -20,8 +20,12 @@ class MagicAiLoginPage {
     return this.page.getByRole('button', { name: /^login$/i });
   }
 
+  private get baseUrl(): string {
+    return process.env.MAGICAI_BASE_URL ?? process.env.BASE_URL ?? 'https://demo.magicai-app';
+  }
+
   async goto(): Promise<void> {
-    await this.page.goto('https://demo.magicai-app/login');
+    await this.page.goto(`${this.baseUrl}/login`);
   }
 
   private async retryExpectVisible({ locator, locatorName }: RetryVisibleParams): Promise<void> {
@@ -34,14 +38,13 @@ class MagicAiLoginPage {
         return;
       } catch (err) {
         lastError = err;
-        await this.page.waitForTimeout(250);
       }
     }
 
     await this.page.pause();
     throw new Error(
       `Element not found after ${attempts} attempts: ${locatorName}. ` +
-        `Please confirm the correct role/name for this element so the locator can be updated.\n` +
+        `Please confirm the correct accessible role/name for this element so the locator can be updated.\n` +
         `Last error: ${String(lastError)}`,
     );
   }
@@ -57,7 +60,7 @@ class MagicAiLoginPage {
     await expect(this.loginButton).toBeEnabled();
   }
 
-  async login(): Promise<void> {
+  async loginWithEnvCredentials(): Promise<void> {
     const username = process.env.TEST_USERNAME ?? process.env.APP_USERNAME;
     const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
 
@@ -97,7 +100,7 @@ test.describe('TC-TC-13 - Successful login redirects to dashboard', () => {
     await loginPage.assertLoginFormReady();
 
     // Act
-    await loginPage.login();
+    await loginPage.loginWithEnvCredentials();
 
     // Assert
     await dashboardPage.assertUserRedirectedToDashboard();
