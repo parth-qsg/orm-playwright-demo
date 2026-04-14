@@ -1,41 +1,46 @@
 import { test } from '@playwright/test';
 import { OrangeHrmLoginPage } from './pages.orangehrm';
 
-interface OrangeHrmTestCredentials {
-  username: string;
+interface PasswordParams {
   password: string;
 }
 
-function getOrangeHrmCredentials(): OrangeHrmTestCredentials {
-  const username = process.env.TEST_USERNAME ?? process.env.APP_USERNAME;
-  const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
-
-  if (!username) {
-    throw new Error('Missing username env var. Set TEST_USERNAME or APP_USERNAME.');
+class OrangeHrmLoginPageExtended extends OrangeHrmLoginPage {
+  constructor(page: Parameters<typeof OrangeHrmLoginPage>[0]) {
+    super(page);
   }
 
-  if (!password) {
-    throw new Error('Missing password env var. Set TEST_PASSWORD or APP_PASSWORD.');
+  async fillPasswordField({ password }: PasswordParams): Promise<void> {
+    await this.assertPasswordTextboxVisible();
+    await this.fillPassword(password);
   }
 
-  return { username, password };
+  async assertStillOnLoginPageAfterFailedSubmit(): Promise<void> {
+    await this.assertOnLoginPage();
+  }
 }
 
-test.describe('Login - Username validation', () => {
-  test('TC-TC-17: Submitting login with blank username shows Required validation and blocks submission', async ({ page }) => {
-    const loginPage = new OrangeHrmLoginPage(page);
-    const { password } = getOrangeHrmCredentials();
+test.describe('TC-TC-17 - Validate validation when username is blank', () => {
+  test('Submitting login with blank username shows username-required validation and blocks submission', async ({ page }) => {
+    const loginPage = new OrangeHrmLoginPageExtended(page);
 
-    // Arrange: Open login page
+    // Arrange: Open the login page and ensure username is blank
     await loginPage.goto();
     await loginPage.assertOnLoginPage();
 
-    // Act: Ensure username is blank, enter a valid password, click Login
-    await loginPage.fillPassword(password);
+    const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
+    if (!password) {
+      throw new Error(
+        'Missing password env var. Set TEST_PASSWORD (preferred) or APP_PASSWORD to a valid password for this environment.',
+      );
+    }
+
+    // Act: Enter password only and attempt to login
+    await loginPage.fillPasswordField({ password });
     await loginPage.clickLogin();
 
-    // Assert: Username required validation is displayed and user remains on login page
+    // Assert: Username required validation is displayed and login is not submitted
     await loginPage.assertUsernameRequiredVisible();
-    await loginPage.assertOnLoginPage();
+    await loginPage.assertStillOnLoginPageAfterFailedSubmit();
   });
 });

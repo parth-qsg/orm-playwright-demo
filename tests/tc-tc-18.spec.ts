@@ -1,9 +1,36 @@
 import { test } from '@playwright/test';
 import { OrangeHrmLoginPage } from './pages.orangehrm';
 
-test.describe('TC-TC-18: Login - Validation when password is blank', () => {
+interface UsernameParams {
+  username: string;
+}
+
+class OrangeHrmLoginPageExtended extends OrangeHrmLoginPage {
+  constructor(page: Parameters<typeof OrangeHrmLoginPage>[0]) {
+    super(page);
+  }
+
+  // --- Locators (as getters) ---
+
+  private get usernameTextboxExtended() {
+    return this.page.getByRole('textbox', { name: 'Username' });
+  }
+
+  // --- Actions / Assertions ---
+
+  async fillUsername({ username }: UsernameParams): Promise<void> {
+    await this.assertUsernameTextboxVisible();
+    await this.usernameTextboxExtended.fill(username);
+  }
+
+  async assertStillOnLoginPageAfterFailedSubmit(): Promise<void> {
+    await this.assertOnLoginPage();
+  }
+}
+
+test.describe('TC-TC-18 - Validate validation when password is blank', () => {
   test('Submitting login with blank password shows password-required validation and blocks submission', async ({ page }) => {
-    const loginPage = new OrangeHrmLoginPage(page);
+    const loginPage = new OrangeHrmLoginPageExtended(page);
 
     // Arrange: Open the login page
     await loginPage.goto();
@@ -11,12 +38,12 @@ test.describe('TC-TC-18: Login - Validation when password is blank', () => {
 
     const username = process.env.TEST_USERNAME ?? process.env.APP_USERNAME ?? 'Admin';
 
-    // Act: Enter username and leave password blank, then click Login
-    await page.getByRole('textbox', { name: 'Username' }).fill(username);
+    // Act: Enter username and submit with blank password
+    await loginPage.fillUsername({ username });
     await loginPage.clickLogin();
 
-    // Assert: Validation for missing password is displayed and login is not submitted
-    await loginPage.assertOnLoginPage();
+    // Assert: Password required validation is displayed and login is not submitted
     await loginPage.assertPasswordRequiredVisible();
+    await loginPage.assertStillOnLoginPageAfterFailedSubmit();
   });
 });

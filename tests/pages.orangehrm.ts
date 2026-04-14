@@ -13,6 +13,10 @@ export interface OrangeHrmCredentials {
 export class OrangeHrmLoginPage {
   constructor(private readonly page: Page) {}
 
+  private get forgotPasswordText(): Locator {
+    return this.page.getByText(/Forgot your password\?/i);
+  }
+
   private get loginUrlRegex(): RegExp {
     return /\/web\/index\.php\/auth\/login/;
   }
@@ -46,9 +50,37 @@ export class OrangeHrmLoginPage {
     await this.passwordTextbox.fill(password);
   }
 
+  async focusPassword(): Promise<void> {
+    await expect(this.passwordTextbox).toBeVisible();
+    await expect(this.passwordTextbox).toBeEnabled();
+    await this.passwordTextbox.focus();
+  }
+
+  async assertPasswordIsFocused(): Promise<void> {
+    await expect(this.passwordTextbox).toBeFocused();
+  }
+
+  async clearPassword(): Promise<void> {
+    await expect(this.passwordTextbox).toBeVisible();
+    await this.passwordTextbox.clear();
+  }
+
+  async assertPasswordCleared(): Promise<void> {
+    await expect(this.passwordTextbox).toHaveValue('');
+  }
+
   async assertPasswordInputRemainsMaskedAfterTyping(samplePassword: string): Promise<void> {
     await this.fillPassword(samplePassword);
     await this.assertPasswordInputIsMasked();
+  }
+
+  async fillUsername(username: string): Promise<void> {
+    await expect(this.usernameTextbox).toBeVisible();
+    await this.usernameTextbox.fill(username);
+  }
+
+  async assertForgotPasswordLinkVisible(): Promise<void> {
+    await expect(this.forgotPasswordText).toBeVisible();
   }
 
   private get loginButton(): Locator {
