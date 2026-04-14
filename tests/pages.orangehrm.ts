@@ -25,8 +25,18 @@ export class OrangeHrmLoginPage {
     return this.page.getByRole('textbox', { name: 'Username' });
   }
 
+  private get usernameInput(): Locator {
+    return this.usernameTextbox;
+  }
+
   private get passwordTextbox(): Locator {
     return this.page.getByRole('textbox', { name: 'Password' });
+  }
+
+  private get passwordInput(): Locator {
+    // On OrangeHRM login page the underlying control is an <input type="password">.
+    // Using a role-based locator here keeps it user-facing and resilient.
+    return this.passwordTextbox;
   }
 
   async assertUsernameTextboxVisible(): Promise<void> {
@@ -37,13 +47,50 @@ export class OrangeHrmLoginPage {
     await expect(this.passwordTextbox).toBeVisible();
   }
 
+  async fillUsername(username: string): Promise<void> {
+    await expect(this.usernameInput).toBeVisible();
+    await expect(this.usernameInput).toBeEnabled();
+    await this.usernameInput.fill(username);
+  }
+
+  async assertUsernameValue(expected: string): Promise<void> {
+    await expect(this.usernameInput).toHaveValue(expected);
+  }
+
+  async assertUsernameCleared(): Promise<void> {
+    await expect(this.usernameInput).toHaveValue('');
+  }
+
   async assertPasswordInputIsMasked(): Promise<void> {
     await expect(this.passwordTextbox).toHaveAttribute('type', 'password');
   }
 
+  async focusPassword(): Promise<void> {
+    await expect(this.passwordInput).toBeVisible();
+    await expect(this.passwordInput).toBeEnabled();
+    await this.passwordInput.focus();
+  }
+
   async fillPassword(password: string): Promise<void> {
-    await expect(this.passwordTextbox).toBeVisible();
-    await this.passwordTextbox.fill(password);
+    await expect(this.passwordInput).toBeVisible();
+    await this.passwordInput.fill(password);
+  }
+
+  async clearPassword(): Promise<void> {
+    await expect(this.passwordInput).toBeVisible();
+    await this.passwordInput.clear();
+  }
+
+  async assertPasswordFocused(): Promise<void> {
+    await expect(this.passwordInput).toBeFocused();
+  }
+
+  async assertPasswordValue(expected: string): Promise<void> {
+    await expect(this.passwordInput).toHaveValue(expected);
+  }
+
+  async assertPasswordCleared(): Promise<void> {
+    await expect(this.passwordInput).toHaveValue('');
   }
 
   async assertPasswordInputRemainsMaskedAfterTyping(samplePassword: string): Promise<void> {
