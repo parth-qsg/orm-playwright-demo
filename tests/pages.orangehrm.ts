@@ -13,6 +13,10 @@ export interface OrangeHrmCredentials {
 export class OrangeHrmLoginPage {
   constructor(private readonly page: Page) {}
 
+  private get forgotPasswordText(): Locator {
+    return this.page.getByText(/Forgot your password\?/i);
+  }
+
   private get loginUrlRegex(): RegExp {
     return /\/web\/index\.php\/auth\/login/;
   }
@@ -68,6 +72,15 @@ export class OrangeHrmLoginPage {
   async assertPasswordInputRemainsMaskedAfterTyping(samplePassword: string): Promise<void> {
     await this.fillPassword(samplePassword);
     await this.assertPasswordInputIsMasked();
+  }
+
+  async fillUsername(username: string): Promise<void> {
+    await expect(this.usernameTextbox).toBeVisible();
+    await this.usernameTextbox.fill(username);
+  }
+
+  async assertForgotPasswordLinkVisible(): Promise<void> {
+    await expect(this.forgotPasswordText).toBeVisible();
   }
 
   private get loginButton(): Locator {
