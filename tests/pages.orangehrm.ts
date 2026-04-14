@@ -29,12 +29,32 @@ export class OrangeHrmLoginPage {
     return this.page.getByRole('textbox', { name: 'Password' });
   }
 
+  private get forgotPasswordLink(): Locator {
+    // Rendered as a paragraph with click handler.
+    return this.page.getByText('Forgot your password?');
+  }
+
   async assertUsernameTextboxVisible(): Promise<void> {
     await expect(this.usernameTextbox).toBeVisible();
   }
 
+  async fillUsername(username: string): Promise<void> {
+    await expect(this.usernameTextbox).toBeVisible();
+    await this.usernameTextbox.fill(username);
+  }
+
   async assertPasswordTextboxVisible(): Promise<void> {
     await expect(this.passwordTextbox).toBeVisible();
+  }
+
+  async assertLoginButtonVisible(): Promise<void> {
+    await expect(this.loginButton).toBeVisible();
+    await expect(this.loginButton).toBeEnabled();
+  }
+
+  async assertForgotPasswordLinkVisible(): Promise<void> {
+    await expect(this.forgotPasswordLink).toBeVisible();
+    await expect(this.forgotPasswordLink).toBeEnabled();
   }
 
   async assertPasswordInputIsMasked(): Promise<void> {
@@ -44,6 +64,13 @@ export class OrangeHrmLoginPage {
   async fillPassword(password: string): Promise<void> {
     await expect(this.passwordTextbox).toBeVisible();
     await this.passwordTextbox.fill(password);
+  }
+
+  async assertLoginFormUiVisible(): Promise<void> {
+    await this.assertUsernameTextboxVisible();
+    await this.assertPasswordTextboxVisible();
+    await this.assertLoginButtonVisible();
+    await this.assertForgotPasswordLinkVisible();
   }
 
   async assertPasswordInputRemainsMaskedAfterTyping(samplePassword: string): Promise<void> {
