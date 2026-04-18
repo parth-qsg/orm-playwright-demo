@@ -31,6 +31,18 @@ export class UserStoryCreatePage {
     return this.page.getByRole('button', { name: /^save$/i });
   }
 
+  private get closeFormButton(): Locator {
+    return this.page.getByRole('button', { name: /close|cancel|dismiss/i });
+  }
+
+  private get previewRegion(): Locator {
+    return this.page.getByRole('region', { name: /preview|live preview/i });
+  }
+
+  private get previewTitle(): Locator {
+    return this.previewRegion.getByRole('heading').first();
+  }
+
   private get successMessageRegion(): Locator {
     // Generic: a toast/alert/region that announces success.
     return this.page.getByRole('alert').or(this.page.getByRole('status')).first();
@@ -95,11 +107,25 @@ export class UserStoryCreatePage {
     await this.saveButton.click();
   }
 
+  async closeForm(): Promise<void> {
+    await this.retryExpectVisible({ locator: this.closeFormButton, locatorName: 'Close/Cancel form button' });
+    await expect(this.closeFormButton).toBeEnabled();
+    await this.closeFormButton.click();
+  }
+
   // --- Assertions (must remain in POM) ---
 
   async assertTitleValue(expected: string): Promise<void> {
     await this.retryExpectVisible({ locator: this.titleTextbox, locatorName: 'Title textbox' });
     await expect(this.titleTextbox).toHaveValue(expected);
+  }
+
+  async assertPreviewTitle(expected: string): Promise<void> {
+    await this.retryExpectVisible({ locator: this.previewRegion, locatorName: 'Preview region' });
+    await expect(this.previewRegion).toBeVisible();
+
+    await this.retryExpectVisible({ locator: this.previewTitle, locatorName: 'Preview title (heading)' });
+    await expect(this.previewTitle).toContainText(expected);
   }
 
   async assertDescriptionEmpty(): Promise<void> {
