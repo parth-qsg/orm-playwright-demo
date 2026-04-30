@@ -159,6 +159,12 @@ export class OrangeHrmLoginPage {
     await expect(this.invalidCredentialsAlert).toBeVisible();
   }
 
+  async assertSecureInvalidCredentialsMessageVisible(): Promise<void> {
+    // Security assertion: error messaging should be generic and not reveal whether username or password was wrong.
+    await expect(this.invalidCredentialsAlert).toBeVisible();
+    await expect(this.invalidCredentialsAlert).toHaveText(/Invalid credentials/i);
+  }
+
   async clickLogin(): Promise<void> {
     await expect(this.loginButton).toBeVisible();
     await expect(this.loginButton).toBeEnabled();
