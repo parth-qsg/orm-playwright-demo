@@ -1,4 +1,6 @@
-import { test } from '@playwright/test';
+// NOTE: This repo's Playwright dependency may not be installed in the execution environment.
+// Importing from 'playwright/test' allows running via `npx playwright test` without '@playwright/test'.
+import { test } from 'playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
 
 test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: ['@functional'] }, () => {
