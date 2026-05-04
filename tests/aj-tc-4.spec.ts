@@ -1,6 +1,4 @@
-// NOTE: This repo executes tests via `npx playwright ...` (not `@playwright/test`).
-// Importing from `playwright/test` avoids module resolution failures in this environment.
-import { test } from 'playwright/test';
+import { test } from '@playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
 
 test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: '@functional' }, () => {
@@ -22,7 +20,8 @@ test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: '@functi
     await loginPage.assertOnLoginPage();
     await loginPage.login(username, password);
 
-    // Navigate to Admin > System Users (direct navigation to avoid flaky side-menu click interception)
+    // Navigate to Admin > System Users
+    // Note: direct navigation is used to avoid side-menu click flakiness.
     await systemUsersPage.goto();
     await systemUsersPage.assertOnSystemUsersPage();
 
