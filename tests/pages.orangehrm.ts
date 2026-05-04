@@ -1,4 +1,4 @@
-import { expect, Locator, Page } from '@playwright/test';
+import { expect, Locator, Page } from 'playwright/test';
 
 export interface SearchPerformanceAssertionParams {
   maxMs: number;
@@ -221,16 +221,22 @@ export class OrangeHrmAdminSystemUsersPage {
 
   private get usernameFilterTextbox(): Locator {
     // System Users filter form: the Username input is present in the filter form.
-    // A11y snapshot shows it's an unnamed textbox adjacent to the "Username" label.
-    return this.page.locator('label', { hasText: 'Username' }).locator('xpath=following::input[1]');
+    // Prefer a user-facing label-based locator, but scope to the filter form to avoid matching hidden inputs.
+    return this.filtersForm.locator('label', { hasText: 'Username' }).locator('xpath=following::input[1]');
   }
 
   private get searchButton(): Locator {
-    return this.page.getByRole('button', { name: 'Search' });
+    return this.filtersForm.getByRole('button', { name: 'Search' });
   }
 
   private get resultsTable(): Locator {
     return this.page.getByRole('table');
+  }
+
+  private get filtersForm(): Locator {
+    // Scope all filter controls to the visible filter form.
+    // OrangeHRM uses multiple inputs with the same classes; scoping avoids hidden duplicates.
+    return this.page.locator('form').filter({ has: this.systemUsersHeading });
   }
 
   private get resultsTableRows(): Locator {
