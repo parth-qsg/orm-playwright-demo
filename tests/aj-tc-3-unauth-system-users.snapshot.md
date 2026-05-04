@@ -1,0 +1,183 @@
+- generic [ref=e3]:
+  - generic:
+    - complementary:
+      - navigation "Sidepanel":
+        - generic:
+          - link "client brand banner" [ref=e4] [cursor=pointer]:
+            - /url: https://www.orangehrm.com/
+            - img "client brand banner" [ref=e6]
+          - generic [ref=e7] [cursor=pointer]: 
+        - generic:
+          - generic [ref=e8]:
+            - generic [ref=e9]:
+              - textbox "Search" [ref=e12]
+              - text: 
+            - separator
+          - list [ref=e13]:
+            - listitem:
+              - link "Admin" [ref=e14] [cursor=pointer]:
+                - /url: /web/index.php/admin/viewAdminModule
+                - generic [ref=e17]: Admin
+            - listitem:
+              - link "PIM" [ref=e18] [cursor=pointer]:
+                - /url: /web/index.php/pim/viewPimModule
+                - generic [ref=e32]: PIM
+            - listitem:
+              - link "Leave" [ref=e33] [cursor=pointer]:
+                - /url: /web/index.php/leave/viewLeaveModule
+                - generic [ref=e36]: Leave
+            - listitem:
+              - link "Time" [ref=e37] [cursor=pointer]:
+                - /url: /web/index.php/time/viewTimeModule
+                - generic [ref=e43]: Time
+            - listitem:
+              - link "Recruitment" [ref=e44] [cursor=pointer]:
+                - /url: /web/index.php/recruitment/viewRecruitmentModule
+                - generic [ref=e50]: Recruitment
+            - listitem:
+              - link "My Info" [ref=e51] [cursor=pointer]:
+                - /url: /web/index.php/pim/viewMyDetails
+                - generic [ref=e57]: My Info
+            - listitem:
+              - link "Performance" [ref=e58] [cursor=pointer]:
+                - /url: /web/index.php/performance/viewPerformanceModule
+                - generic [ref=e66]: Performance
+            - listitem:
+              - link "Dashboard" [ref=e67] [cursor=pointer]:
+                - /url: /web/index.php/dashboard/index
+                - generic [ref=e70]: Dashboard
+            - listitem:
+              - link "Directory" [ref=e71] [cursor=pointer]:
+                - /url: /web/index.php/directory/viewDirectory
+                - generic [ref=e74]: Directory
+            - listitem:
+              - link "Maintenance" [ref=e75] [cursor=pointer]:
+                - /url: /web/index.php/maintenance/viewMaintenanceModule
+                - generic [ref=e79]: Maintenance
+            - listitem:
+              - link "Claim" [ref=e80] [cursor=pointer]:
+                - /url: /web/index.php/claim/viewClaimModule
+                - img [ref=e83]
+                - generic [ref=e87]: Claim
+            - listitem:
+              - link "Buzz" [ref=e88] [cursor=pointer]:
+                - /url: /web/index.php/buzz/viewBuzz
+                - generic [ref=e91]: Buzz
+    - banner [ref=e92]:
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - generic [ref=e95] [cursor=pointer]: 
+          - generic [ref=e96]:
+            - heading "Admin" [level=6] [ref=e97]
+            - heading "User Management" [level=6] [ref=e98]
+        - link "Upgrade" [ref=e100]:
+          - /url: https://orangehrm.com/open-source/upgrade-to-advanced
+          - button "Upgrade" [ref=e101] [cursor=pointer]: Upgrade
+        - list [ref=e107]:
+          - listitem [ref=e108]:
+            - generic [ref=e109] [cursor=pointer]:
+              - img "profile picture" [ref=e110]
+              - generic [ref=e111]: 
+      - navigation "Topbar Menu" [ref=e113]:
+        - list [ref=e114]:
+          - listitem [ref=e115] [cursor=pointer]:
+            - generic [ref=e116]:
+              - text: User Management
+              - generic [ref=e117]: 
+          - listitem [ref=e118] [cursor=pointer]:
+            - generic [ref=e119]:
+              - text: Job
+              - generic [ref=e120]: 
+          - listitem [ref=e121] [cursor=pointer]:
+            - generic [ref=e122]:
+              - text: Organization
+              - generic [ref=e123]: 
+          - listitem [ref=e124] [cursor=pointer]:
+            - generic [ref=e125]:
+              - text: Qualifications
+              - generic [ref=e126]: 
+          - listitem [ref=e127] [cursor=pointer]:
+            - link "Nationalities" [ref=e128]:
+              - /url: "#"
+          - listitem [ref=e129] [cursor=pointer]:
+            - generic [ref=e130]:
+              - text: More
+              - generic [ref=e131]: 
+          - button "" [ref=e133] [cursor=pointer]:
+            - generic [ref=e134]: 
+  - generic [ref=e135]:
+    - generic [ref=e137]:
+      - generic [ref=e138]:
+        - generic [ref=e139]:
+          - heading "System Users" [level=5] [ref=e141]
+          - button "" [ref=e144] [cursor=pointer]:
+            - generic [ref=e145]: 
+        - text:  
+      - generic [ref=e146]:
+        - button " Add" [ref=e148] [cursor=pointer]:
+          - generic [ref=e149]: 
+          - text: Add
+        - generic [ref=e150]:
+          - separator [ref=e151]
+          - generic [ref=e153]: (2) Records Found
+        - table [ref=e155]:
+          - rowgroup [ref=e156]:
+            - row "Employee Name dhruv Taylor   Username Admin User Role Admin Status Enabled" [ref=e158]:
+              - generic [ref=e159]:
+                - generic [ref=e160]:
+                  - cell "Employee Name dhruv Taylor" [ref=e162]:
+                    - generic [ref=e163]:
+                      - generic [ref=e164]: Employee Name
+                      - generic [ref=e165]: dhruv Taylor
+                  - cell " " [ref=e167]:
+                    - generic [ref=e168]:
+                      - button "" [ref=e169] [cursor=pointer]:
+                        - generic [ref=e170]: 
+                      - button "" [ref=e171] [cursor=pointer]:
+                        - generic [ref=e172]: 
+                - generic [ref=e173]:
+                  - cell "Username Admin" [ref=e174]:
+                    - generic [ref=e175]:
+                      - generic [ref=e176]: Username
+                      - generic [ref=e177]: Admin
+                  - cell "User Role Admin" [ref=e178]:
+                    - generic [ref=e179]:
+                      - generic [ref=e180]: User Role
+                      - generic [ref=e181]: Admin
+                  - cell "Status Enabled" [ref=e182]:
+                    - generic [ref=e183]:
+                      - generic [ref=e184]: Status
+                      - generic [ref=e185]: Enabled
+            - row "Employee Name dhruv Taylor   Username Testkatalon_test User Role Admin Status Enabled" [ref=e187]:
+              - generic [ref=e188]:
+                - generic [ref=e189]:
+                  - cell "Employee Name dhruv Taylor" [ref=e191]:
+                    - generic [ref=e192]:
+                      - generic [ref=e193]: Employee Name
+                      - generic [ref=e194]: dhruv Taylor
+                  - cell " " [ref=e196]:
+                    - generic [ref=e197]:
+                      - button "" [ref=e198] [cursor=pointer]:
+                        - generic [ref=e199]: 
+                      - button "" [ref=e200] [cursor=pointer]:
+                        - generic [ref=e201]: 
+                - generic [ref=e202]:
+                  - cell "Username Testkatalon_test" [ref=e203]:
+                    - generic [ref=e204]:
+                      - generic [ref=e205]: Username
+                      - generic [ref=e206]: Testkatalon_test
+                  - cell "User Role Admin" [ref=e207]:
+                    - generic [ref=e208]:
+                      - generic [ref=e209]: User Role
+                      - generic [ref=e210]: Admin
+                  - cell "Status Enabled" [ref=e211]:
+                    - generic [ref=e212]:
+                      - generic [ref=e213]: Status
+                      - generic [ref=e214]: Enabled
+    - generic [ref=e216]:
+      - paragraph [ref=e217]: OrangeHRM OS 5.8
+      - paragraph [ref=e218]:
+        - text: © 2005 - 2026
+        - link "OrangeHRM, Inc" [ref=e219] [cursor=pointer]:
+          - /url: http://www.orangehrm.com
+        - text: . All rights reserved.
