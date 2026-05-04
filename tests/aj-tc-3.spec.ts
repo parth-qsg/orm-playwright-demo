@@ -1,5 +1,7 @@
-import { test } from 'playwright/test';
+import { test } from '@playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
+
+test.use({ video: 'retain-on-failure' });
 
 type AdminCredentials = { username: string; password: string };
 
@@ -16,6 +18,15 @@ function getAdminCredentials(): AdminCredentials {
   return { username, password };
 }
 
+function getSystemUsersUrl(): string {
+  const baseUrl =
+    process.env.BASE_URL ??
+    process.env.ORANGEHRM_BASE_URL ??
+    'https://opensource-demo.orangehrmlive.com';
+
+  return `${baseUrl}/web/index.php/admin/viewSystemUsers`;
+}
+
 test.describe('AJ-TC-3 - Admin > System Users authentication guard', { tag: ['@functional'] }, () => {
   test('AJ-TC-3 - Prevent unauthenticated access to System Users and require login', async ({ page }) => {
     const loginPage = new OrangeHrmLoginPage(page);
@@ -28,11 +39,7 @@ test.describe('AJ-TC-3 - Admin > System Users authentication guard', { tag: ['@f
     // Act: open the Admin > System Users page URL directly without logging in
     // NOTE: We intentionally navigate directly (not via SystemUsersPage.goto()) because that method
     // asserts the Admin URL, which is not true when the auth guard redirects to Login.
-    await page.goto(
-      process.env.ORANGEHRM_BASE_URL
-        ? `${process.env.ORANGEHRM_BASE_URL}/web/index.php/admin/viewSystemUsers`
-        : 'https://opensource-demo.orangehrmlive.com/web/index.php/admin/viewSystemUsers',
-    );
+    await page.goto(getSystemUsersUrl());
 
     // Assert: redirection to the login page
     await loginPage.assertOnLoginPage();
