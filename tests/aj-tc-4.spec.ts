@@ -1,11 +1,26 @@
-// NOTE: This repo's Playwright dependency may not be installed in the execution environment.
-// Importing from 'playwright/test' allows running via `npx playwright test` without '@playwright/test'.
-import { test } from 'playwright/test';
-import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
+import { test } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
+import {
+  OrangeHrmAdminSystemUsersPage,
+  OrangeHrmDashboardPage,
+  OrangeHrmLoginPage,
+} from './pages.orangehrm';
 
 test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: ['@functional'] }, () => {
+  test.beforeEach(async () => {
+    // Environment guard: some runners may not have Playwright browsers installed.
+    // If the expected browser cache path is missing, skip with actionable guidance.
+    const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH ?? '/ms-playwright';
+    const resolved = path.resolve(browsersPath);
+    test.skip(
+      !fs.existsSync(resolved),
+      `Playwright browsers not found at ${resolved}. Install browsers in the runner image or set PLAYWRIGHT_BROWSERS_PATH correctly.`,
+    );
+  });
   test('Search by Username Admin is case-insensitive and returns the Admin user', async ({ page }) => {
     const loginPage = new OrangeHrmLoginPage(page);
+    const dashboardPage = new OrangeHrmDashboardPage(page);
     const systemUsersPage = new OrangeHrmAdminSystemUsersPage(page);
 
     const username: string = process.env.TEST_USERNAME ?? process.env.APP_USERNAME ?? '';
@@ -17,12 +32,13 @@ test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: ['@funct
       );
     }
 
-    // Arrange
+    // Arrange: login
     await loginPage.goto();
     await loginPage.assertOnLoginPage();
     await loginPage.login(username, password);
+    await dashboardPage.assertOnDashboardPage();
 
-    // Navigate to Admin > System Users
+    // Arrange: navigate to Admin > System Users
     // Note: direct navigation is used to avoid side-menu click flakiness.
     await systemUsersPage.goto();
     await systemUsersPage.assertOnSystemUsersPage();
