@@ -143,6 +143,11 @@ export class OrangeHrmLoginPage {
     await expect(this.page).toHaveURL(/\/web\/index\.php\/dashboard\/index/);
   }
 
+  async assertRedirectedToLoginFromProtectedPage(): Promise<void> {
+    // OrangeHRM redirects unauthenticated users to the login route.
+    await this.assertOnLoginPage();
+  }
+
   async loginExpectingFailure({ username, password }: OrangeHrmCredentials): Promise<void> {
     await expect(this.usernameTextbox).toBeVisible();
     await expect(this.passwordTextbox).toBeVisible();
@@ -288,8 +293,21 @@ export class OrangeHrmAdminSystemUsersPage {
     await expect(this.systemUsersHeading).toBeVisible();
   }
 
+  private get filtersToggleButton(): Locator {
+    // The filter panel can be collapsed/expanded via an icon-only button.
+    // In the accessibility tree it appears as a button named "".
+    return this.page.getByRole('button', { name: '' }).first();
+  }
+
   async expandFilters(): Promise<void> {
-    // Current OrangeHRM demo renders the filters expanded by default.
+    // The filter panel can be collapsed by default depending on viewport/state.
+    // If the Username filter is not visible, expand the filters panel.
+    if (!(await this.usernameFilterTextbox.isVisible())) {
+      await expect(this.filtersToggleButton).toBeVisible();
+      await expect(this.filtersToggleButton).toBeEnabled();
+      await this.filtersToggleButton.click();
+    }
+
     await expect(this.usernameFilterTextbox).toBeVisible();
   }
 
