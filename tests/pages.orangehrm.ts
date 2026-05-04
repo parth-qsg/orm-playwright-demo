@@ -244,9 +244,9 @@ export class OrangeHrmAdminSystemUsersPage {
   }
 
   private get filtersForm(): Locator {
-    // Scope all filter controls to the visible filter form.
-    // OrangeHRM uses multiple inputs with the same classes; scoping avoids hidden duplicates.
-    return this.page.locator('form').filter({ has: this.systemUsersHeading });
+    // System Users filter form is the only <form> on the page in the demo.
+    // Do not scope by heading (the heading is outside the form), otherwise the locator resolves to 0.
+    return this.page.locator('form');
   }
 
   private get resultsTableRows(): Locator {
