@@ -1,7 +1,7 @@
 import { test } from '@playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
 
-test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: '@functional' }, () => {
+test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: ['@functional'] }, () => {
   test('Search by Username Admin is case-insensitive and returns the Admin user', async ({ page }) => {
     const loginPage = new OrangeHrmLoginPage(page);
     const systemUsersPage = new OrangeHrmAdminSystemUsersPage(page);

@@ -1,7 +1,6 @@
 import { test } from '@playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
 
-test.use({ video: 'retain-on-failure' });
 
 type AdminCredentials = { username: string; password: string };
 
@@ -35,6 +34,10 @@ test.describe('AJ-TC-3 - Admin > System Users authentication guard', { tag: ['@f
 
     // Arrange: no active authenticated session
     await page.context().clearCookies();
+    await page.addInitScript(() => {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+    });
 
     // Act: open the Admin > System Users page URL directly without logging in
     // NOTE: We intentionally navigate directly (not via SystemUsersPage.goto()) because that method

@@ -197,6 +197,16 @@ export class OrangeHrmDashboardPage {
     return this.page.getByRole('link', { name: 'Admin' });
   }
 
+  async clickAdminMenu(): Promise<void> {
+    await expect(this.adminSideMenuLink).toBeVisible();
+    await expect(this.adminSideMenuLink).toBeEnabled();
+
+    // The dashboard widgets can occasionally intercept pointer events.
+    // Use a forced click to ensure navigation is triggered reliably.
+    await this.adminSideMenuLink.click({ force: true });
+    await expect(this.page).toHaveURL(/\/web\/index\.php\/admin\/viewSystemUsers/);
+  }
+
   async assertOnDashboardPage(): Promise<void> {
     await expect(this.page).toHaveURL(this.dashboardUrlRegex);
     await expect(this.dashboardHeading).toBeVisible();
