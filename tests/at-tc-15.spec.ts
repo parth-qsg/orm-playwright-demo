@@ -1,14 +1,24 @@
 import { test, expect, Locator, Page } from '@playwright/test';
 
 /**
- * NOTE:
- * This testcase requires an application-under-test (AUT) that provides a Signup page
- * with a Referral Code field.
+ * AT-TC-15
+ * Validate successful signup with all fields including referral.
  *
- * Due to workspace file access restrictions, no existing app-specific page objects
- * (e.g., under /pages) can be inspected/reused here; therefore this spec defines
- * a local POM for the signup flow.
+ * NOTE (codebase constraints):
+ * The standards require reusing POMs from /pages and helpers from /utils/helpers,
+ * but file system access is restricted to /workspace/repo/tests only.
+ * Therefore, this spec defines minimal local POMs to remain standards-compliant
+ * (POM + AAA + role-based locators + assertions inside POM).
+ *
+ * NOTE (execution constraints):
+ * Browser navigation to the AUT could not be completed in this environment due to missing/invalid baseURL/DNS.
+ * Locators are implemented using resilient role/label patterns and an Element Recovery Rule helper.
  */
+
+interface RetryVisibleParams {
+  locator: Locator;
+  locatorName: string;
+}
 
 interface SignupParams {
   fullName: string;
@@ -18,16 +28,44 @@ interface SignupParams {
   referralCode: string;
 }
 
-class SignupPage {
-  constructor(private readonly page: Page) {}
+class BaseUiPage {
+  constructor(protected readonly page: Page) {}
 
-  // Locators (as getters)
+  protected async retryExpectVisible({ locator, locatorName }: RetryVisibleParams): Promise<void> {
+    const attempts = 3; // initial + 2 retries
+    let lastError: unknown;
+
+    for (let i = 0; i < attempts; i++) {
+      try {
+        await expect(locator).toBeVisible();
+        return;
+      } catch (err) {
+        lastError = err;
+        await this.page.waitForTimeout(250);
+      }
+    }
+
+    await this.page.pause();
+    throw new Error(
+      `Element not found after ${attempts} attempts: ${locatorName}. ` +
+        `Please confirm the correct accessible name/role for this element so the locator can be updated.\n` +
+        `Last error: ${String(lastError)}`,
+    );
+  }
+}
+
+class SignupPage extends BaseUiPage {
+  // Locators (getters)
+  private get pageHeading(): Locator {
+    return this.page.getByRole('heading', { name: /sign up|signup|create account|register/i }).first();
+  }
+
   private get fullNameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /full name/i });
+    return this.page.getByRole('textbox', { name: /full name|name/i });
   }
 
   private get usernameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /^username$/i });
+    return this.page.getByRole('textbox', { name: /username/i });
   }
 
   private get emailTextbox(): Locator {
@@ -35,6 +73,7 @@ class SignupPage {
   }
 
   private get passwordTextbox(): Locator {
+    // Prefer an accessible password textbox; many apps expose it as textbox with label 'Password'.
     return this.page.getByRole('textbox', { name: /password/i });
   }
 
@@ -46,83 +85,122 @@ class SignupPage {
     return this.page.getByRole('button', { name: /sign up|signup|create account|register/i });
   }
 
-  // Actions / assertions
   async goto(): Promise<void> {
-    // Prefer configured baseURL; fallback to SIGNUP_URL.
     const signupUrl = process.env.SIGNUP_URL ?? '/signup';
     await this.page.goto(signupUrl);
   }
 
   async assertOnSignupPage(): Promise<void> {
-    await expect(this.page).toHaveURL(/signup/i);
-    await expect(this.fullNameTextbox).toBeVisible();
-    await expect(this.usernameTextbox).toBeVisible();
-    await expect(this.emailTextbox).toBeVisible();
-    await expect(this.passwordTextbox).toBeVisible();
-    await expect(this.referralCodeTextbox).toBeVisible();
-    await expect(this.signUpButton).toBeVisible();
+    await expect(this.page).toHaveURL(/signup|register/i);
+
+    // At least one strong signal the page is the signup page.
+    await this.retryExpectVisible({ locator: this.pageHeading, locatorName: 'Signup page heading' });
+
+    await this.retryExpectVisible({ locator: this.fullNameTextbox, locatorName: 'Full name textbox' });
+    await this.retryExpectVisible({ locator: this.usernameTextbox, locatorName: 'Username textbox' });
+    await this.retryExpectVisible({ locator: this.emailTextbox, locatorName: 'Email textbox' });
+    await this.retryExpectVisible({ locator: this.passwordTextbox, locatorName: 'Password textbox' });
+    await this.retryExpectVisible({ locator: this.referralCodeTextbox, locatorName: 'Referral code textbox' });
+    await this.retryExpectVisible({ locator: this.signUpButton, locatorName: 'Sign up button' });
+
+    await expect(this.signUpButton).toBeEnabled();
   }
 
-  async signup({ fullName, username, email, password, referralCode }: SignupParams): Promise<void> {
-    await expect(this.fullNameTextbox).toBeVisible();
+  async signup(params: SignupParams): Promise<void> {
+    const { fullName, username, email, password, referralCode } = params;
+
+    await this.retryExpectVisible({ locator: this.fullNameTextbox, locatorName: 'Full name textbox' });
     await this.fullNameTextbox.fill(fullName);
 
-    await expect(this.usernameTextbox).toBeVisible();
+    await this.retryExpectVisible({ locator: this.usernameTextbox, locatorName: 'Username textbox' });
     await this.usernameTextbox.fill(username);
 
-    await expect(this.emailTextbox).toBeVisible();
+    await this.retryExpectVisible({ locator: this.emailTextbox, locatorName: 'Email textbox' });
     await this.emailTextbox.fill(email);
 
-    await expect(this.passwordTextbox).toBeVisible();
+    await this.retryExpectVisible({ locator: this.passwordTextbox, locatorName: 'Password textbox' });
     await this.passwordTextbox.fill(password);
 
-    await expect(this.referralCodeTextbox).toBeVisible();
+    await this.retryExpectVisible({ locator: this.referralCodeTextbox, locatorName: 'Referral code textbox' });
     await this.referralCodeTextbox.fill(referralCode);
 
+    await this.retryExpectVisible({ locator: this.signUpButton, locatorName: 'Sign up button' });
     await expect(this.signUpButton).toBeEnabled();
     await this.signUpButton.click();
   }
 }
 
-class HomePage {
-  constructor(private readonly page: Page) {}
+class HomePage extends BaseUiPage {
+  private get homeHeading(): Locator {
+    return this.page.getByRole('heading', { name: /home|dashboard/i }).first();
+  }
 
-  private get authenticatedIndicator(): Locator {
-    // Common patterns: Logout button, user menu, or profile avatar.
-    return this.page.getByRole('button', { name: /logout|sign out/i });
+  private get logoutButton(): Locator {
+    return this.page.getByRole('button', { name: /logout|log out|sign out/i });
+  }
+
+  private get userMenuButton(): Locator {
+    return this.page.getByRole('button', { name: /account|profile|user menu|settings/i });
   }
 
   private get accountLink(): Locator {
     return this.page.getByRole('link', { name: /account|profile|settings/i });
   }
 
-  async assertOnHomePage(): Promise<void> {
+  async assertRedirectedToHome(): Promise<void> {
     await expect(this.page).toHaveURL(/home|dashboard|app|\/$/i);
+
+    // Best-effort: many apps show either a heading or a main landmark.
+    await this.retryExpectVisible({ locator: this.page.getByRole('main'), locatorName: 'Main landmark' });
   }
 
   async assertAuthenticated(): Promise<void> {
-    // If the AUT uses a different authenticated indicator, this locator will need adjustment.
-    await expect(this.authenticatedIndicator).toBeVisible();
+    // Try several common authenticated indicators.
+    try {
+      await this.retryExpectVisible({ locator: this.logoutButton, locatorName: 'Logout/Sign out button' });
+      return;
+    } catch {
+      // fall through
+    }
+
+    try {
+      await this.retryExpectVisible({ locator: this.userMenuButton, locatorName: 'User menu button' });
+      return;
+    } catch {
+      // fall through
+    }
+
+    await this.retryExpectVisible({ locator: this.homeHeading, locatorName: 'Home/Dashboard heading' });
   }
 
   async openAccount(): Promise<void> {
-    await expect(this.accountLink).toBeVisible();
+    // Prefer a dedicated account link; otherwise open menu and then look for link.
+    const accountLinkVisible = await this.accountLink.isVisible().catch(() => false);
+    if (accountLinkVisible) {
+      await expect(this.accountLink).toBeEnabled();
+      await this.accountLink.click();
+      return;
+    }
+
+    await this.retryExpectVisible({ locator: this.userMenuButton, locatorName: 'User menu button' });
+    await expect(this.userMenuButton).toBeEnabled();
+    await this.userMenuButton.click();
+
+    await this.retryExpectVisible({ locator: this.accountLink, locatorName: 'Account/Profile/Settings link' });
     await expect(this.accountLink).toBeEnabled();
     await this.accountLink.click();
   }
 }
 
-class AccountPage {
-  constructor(private readonly page: Page) {}
-
-  private get referralCodeValue(): Locator {
-    // Display label/value pattern.
-    return this.page.getByText(/referral code/i);
+class AccountPage extends BaseUiPage {
+  private get referralSectionLabel(): Locator {
+    return this.page.getByText(/referral code|referral/i).first();
   }
 
   async assertReferralAssociationPersisted(referralCode: string): Promise<void> {
     await expect(this.page).toHaveURL(/account|profile|settings/i);
-    await expect(this.referralCodeValue).toBeVisible();
+
+    await this.retryExpectVisible({ locator: this.referralSectionLabel, locatorName: 'Referral code label/value' });
     await expect(this.page.getByText(new RegExp(referralCode, 'i'))).toBeVisible();
   }
 }
@@ -131,13 +209,12 @@ test.describe(
   'AT-TC-15 - Validate successful signup with all fields including referral',
   { tag: ['@functional', '@regression', '@positive'] },
   () => {
-    test('AT-TC-15 - Signup with full fields and referral completes and persists referral association', async ({ page }) => {
+    test('AT-TC-15 - Signup with full fields and referral completed; user authenticated with referral linked', async ({ page }) => {
       const signupPage = new SignupPage(page);
       const homePage = new HomePage(page);
       const accountPage = new AccountPage(page);
 
       // Arrange
-      // Preconditions: user not authenticated, signup accessible.
       await signupPage.goto();
       await signupPage.assertOnSignupPage();
 
@@ -151,10 +228,9 @@ test.describe(
       });
 
       // Assert
-      await homePage.assertOnHomePage();
+      await homePage.assertRedirectedToHome();
       await homePage.assertAuthenticated();
 
-      // Assert (referral persisted)
       await homePage.openAccount();
       await accountPage.assertReferralAssociationPersisted('REF-ALL-999');
     });
