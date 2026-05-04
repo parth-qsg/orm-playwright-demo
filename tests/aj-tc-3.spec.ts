@@ -1,7 +1,9 @@
 import { test } from '@playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
 
-function getAdminCredentials(): { username: string; password: string } {
+type AdminCredentials = { username: string; password: string };
+
+function getAdminCredentials(): AdminCredentials {
   const username = process.env.TEST_USERNAME ?? process.env.APP_USERNAME;
   const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
 
@@ -25,13 +27,13 @@ test.describe(
         const systemUsersPage = new OrangeHrmAdminSystemUsersPage(page);
         const { username, password } = getAdminCredentials();
 
-        // Arrange: ensure no authenticated session by starting with a clean state
+        // Arrange: no active authenticated session
         await page.context().clearCookies();
 
-        // Act: open System Users directly without logging in
+        // Act: open the Admin > System Users page URL directly without logging in
         await systemUsersPage.goto();
 
-        // Assert: user is redirected to login
+        // Assert: redirection to the login page
         await loginPage.assertOnLoginPage();
 
         // Act: login with valid Admin credentials
@@ -40,7 +42,7 @@ test.describe(
         // Act: navigate to Admin > System Users again
         await systemUsersPage.goto();
 
-        // Assert: System Users page loads
+        // Assert: System Users page loads after authentication
         await systemUsersPage.assertOnSystemUsersPage();
       },
     );

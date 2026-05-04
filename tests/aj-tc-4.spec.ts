@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
 
 test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: '@functional' }, () => {
-  test('Search by Username (admin/ADMIN) returns the Admin user', async ({ page }) => {
+  test('Search by Username Admin is case-insensitive and returns the Admin user', async ({ page }) => {
     const loginPage = new OrangeHrmLoginPage(page);
     const systemUsersPage = new OrangeHrmAdminSystemUsersPage(page);
 
@@ -20,21 +20,22 @@ test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: '@functi
     await loginPage.assertOnLoginPage();
     await loginPage.login(username, password);
 
+    // Navigate to Admin > System Users (direct navigation to avoid flaky side-menu click interception)
     await systemUsersPage.goto();
     await systemUsersPage.assertOnSystemUsersPage();
 
-    // Act
+    // Act: search with lowercase
     await systemUsersPage.searchByUsername('admin');
 
-    // Assert
+    // Assert: Admin user returned
     await systemUsersPage.assertUsernameFilterValue('admin');
     await systemUsersPage.assertExactlyOneUsernameResult('Admin');
 
-    // Act
+    // Act: search with uppercase
     await systemUsersPage.clearUsernameSearch();
     await systemUsersPage.searchByUsername('ADMIN');
 
-    // Assert
+    // Assert: Admin user returned
     await systemUsersPage.assertUsernameFilterValue('ADMIN');
     await systemUsersPage.assertExactlyOneUsernameResult('Admin');
   });
