@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { test } from 'playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
 
 type AdminCredentials = { username: string; password: string };
@@ -31,7 +31,13 @@ test.describe(
         await page.context().clearCookies();
 
         // Act: open the Admin > System Users page URL directly without logging in
-        await systemUsersPage.goto();
+        // NOTE: We intentionally navigate directly (not via SystemUsersPage.goto()) because that method
+        // asserts the Admin URL, which is not true when the auth guard redirects to Login.
+        await page.goto(
+          process.env.ORANGEHRM_BASE_URL
+            ? `${process.env.ORANGEHRM_BASE_URL}/web/index.php/admin/viewSystemUsers`
+            : 'https://opensource-demo.orangehrmlive.com/web/index.php/admin/viewSystemUsers',
+        );
 
         // Assert: redirection to the login page
         await loginPage.assertOnLoginPage();

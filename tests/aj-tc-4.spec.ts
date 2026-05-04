@@ -1,4 +1,6 @@
-import { test } from '@playwright/test';
+// NOTE: This repo executes tests via `npx playwright ...` (not `@playwright/test`).
+// Importing from `playwright/test` avoids module resolution failures in this environment.
+import { test } from 'playwright/test';
 import { OrangeHrmAdminSystemUsersPage, OrangeHrmLoginPage } from './pages.orangehrm';
 
 test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: '@functional' }, () => {
