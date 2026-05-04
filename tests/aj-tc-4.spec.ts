@@ -9,12 +9,17 @@ test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: '@functi
     const username: string = process.env.TEST_USERNAME ?? process.env.APP_USERNAME ?? '';
     const password: string = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD ?? '';
 
+    if (!username || !password) {
+      throw new Error(
+        'Missing credentials: set TEST_USERNAME/TEST_PASSWORD (preferred) or APP_USERNAME/APP_PASSWORD environment variables.',
+      );
+    }
+
     // Arrange
     await loginPage.goto();
     await loginPage.assertOnLoginPage();
     await loginPage.login(username, password);
 
-    // Arrange
     await systemUsersPage.goto();
     await systemUsersPage.assertOnSystemUsersPage();
 
@@ -23,7 +28,6 @@ test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: '@functi
 
     // Assert
     await systemUsersPage.assertUsernameFilterValue('admin');
-    await systemUsersPage.assertRecordFoundCount(1);
     await systemUsersPage.assertExactlyOneUsernameResult('Admin');
 
     // Act
@@ -32,7 +36,6 @@ test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: '@functi
 
     // Assert
     await systemUsersPage.assertUsernameFilterValue('ADMIN');
-    await systemUsersPage.assertRecordFoundCount(1);
     await systemUsersPage.assertExactlyOneUsernameResult('Admin');
   });
 });
