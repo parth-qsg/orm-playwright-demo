@@ -1,4 +1,7 @@
 import { test, expect, Locator, Page } from '@playwright/test';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 /**
  * TestCase ID: e716bd75-64e5-4161-a271-9aa90d01a86a
@@ -37,7 +40,7 @@ class BaseUiPage {
    * - If still not found after retries, pause and ask for manual confirmation
    */
   protected async retryExpectVisible({ locator, locatorName }: RetryVisibleParams): Promise<void> {
-    const attempts = 3;
+    const attempts = 3; // initial + 2 retries
     let lastError: unknown;
 
     for (let i = 0; i < attempts; i++) {
@@ -79,6 +82,7 @@ class SignupPage extends BaseUiPage {
   }
 
   private get passwordTextbox(): Locator {
+    // Many apps expose password inputs with role=textbox and accessible name "Password".
     return this.page.getByRole('textbox', { name: /^password$/i });
   }
 
@@ -87,6 +91,7 @@ class SignupPage extends BaseUiPage {
   }
 
   private get passwordRequiredValidationMessage(): Locator {
+    // Expected: "Password is required" near the password field.
     return this.page.getByText(/^password is required$/i);
   }
 
@@ -140,6 +145,7 @@ class SignupPage extends BaseUiPage {
   }
 
   async assertSignupSubmissionBlocked(): Promise<void> {
+    // Generic assertion: user remains on signup/register page.
     await expect(this.page).toHaveURL(/signup|register/i);
   }
 
@@ -152,11 +158,7 @@ class SignupPage extends BaseUiPage {
 }
 
 test.describe('AT-TC-16 - Signup fails when password is missing', { tag: ['@functional', '@high'] }, () => {
-  test('Signup blocked due to missing password; validation shown', async ({ page, browserName }) => {
-    test.skip(
-      browserName === 'chromium' && process.env.CI === 'true',
-      'CI environment is missing the Chromium executable (Playwright browser install/image mismatch).',
-    );
+  test('Signup blocked due to missing password; validation shown', async ({ page }) => {
     const signupPage = new SignupPage(page);
 
     // Arrange
