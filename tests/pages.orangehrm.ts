@@ -259,13 +259,20 @@ export class OrangeHrmAdminSystemUsersPage {
   }
 
   private get firstResultRow(): Locator {
-    // First data row after the header row.
-    return this.resultsTableRows.nth(1);
+    // OrangeHRM renders the table as a single accessible row per record (no separate header row).
+    // So the first row is the first data row.
+    return this.resultsTableRows.first();
   }
 
   private get firstResultUsernameCell(): Locator {
-    // In OrangeHRM table, the first column in the data row is Username.
-    return this.firstResultRow.getByRole('cell').first();
+    // The Username value is nested inside the cell as a separate element.
+    // Target the cell by its accessible name prefix to avoid relying on column order.
+    return this.firstResultRow.getByRole('cell', { name: /Username/i });
+  }
+
+  private get firstResultUsernameValue(): Locator {
+    // Within the Username cell, the actual username value is the second line.
+    return this.firstResultUsernameCell.getByText(/.+/).last();
   }
 
   private get recordsFoundText(): Locator {
@@ -343,8 +350,12 @@ export class OrangeHrmAdminSystemUsersPage {
 
   async assertExactlyOneUsernameResult(expectedUsername: string): Promise<void> {
     await expect(this.resultsTable).toBeVisible();
+    await expect(this.recordsFoundText).toBeVisible();
+    await expect(this.recordsFoundText).toContainText('(1)');
+
     await expect(this.firstResultUsernameCell).toBeVisible();
-    await expect(this.firstResultUsernameCell).toHaveText(expectedUsername);
+    await expect(this.firstResultUsernameValue).toBeVisible();
+    await expect(this.firstResultUsernameValue).toHaveText(expectedUsername);
   }
 
   async waitForResultsToLoad(): Promise<void> {
