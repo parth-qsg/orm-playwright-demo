@@ -20,28 +20,23 @@ test.describe('AJ-TC-4 - Admin user search is case-insensitive', { tag: ['@funct
       );
     }
 
-    // Arrange: open login page and login
+    // Arrange
     await loginPage.goto();
     await loginPage.assertOnLoginPage();
     await loginPage.login(username, password);
     await dashboardPage.assertOnDashboardPage();
 
-    // Arrange: navigate to Admin > System Users
     await dashboardPage.clickAdminMenu();
     await systemUsersPage.assertOnSystemUsersPage();
 
-    // Act: search with lowercase
+    // Act + Assert: lowercase search
     await systemUsersPage.searchByUsername('admin');
-
-    // Assert: filter value and results contain Admin
     await systemUsersPage.assertUsernameFilterValue('admin');
     await systemUsersPage.assertExactlyOneUsernameResult('Admin');
 
-    // Act: clear and search with uppercase
+    // Act + Assert: uppercase search
     await systemUsersPage.clearUsernameSearch();
     await systemUsersPage.searchByUsername('ADMIN');
-
-    // Assert: filter value and results contain Admin
     await systemUsersPage.assertUsernameFilterValue('ADMIN');
     await systemUsersPage.assertExactlyOneUsernameResult('Admin');
   });

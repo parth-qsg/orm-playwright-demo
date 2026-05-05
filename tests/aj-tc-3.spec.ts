@@ -36,19 +36,23 @@ test.describe(
 
       await page.goto(systemUsersUrl);
 
-      // Assert: redirection to the login page
+      // Assert: redirection to the login page and login page is displayed
       await loginPage.assertRedirectedToLoginFromProtectedPage();
 
       // Act: login with valid Admin credentials
       await loginPage.login(username, password);
 
-      // Assert: dashboard loads
-      await dashboardPage.assertOnDashboardPage();
+      // Assert: post-login landing is either Dashboard or the originally requested System Users page
+      // (OrangeHRM can return to the protected URL after successful authentication).
+      const landedOnSystemUsers: boolean = /\/web\/index\.php\/admin\/viewSystemUsers/.test(page.url());
+      if (!landedOnSystemUsers) {
+        await dashboardPage.assertOnDashboardPage();
+      }
 
-      // Act: navigate to Admin > System Users again
+      // Act: navigate to Admin > System Users again and verify the page loads
       await systemUsersPage.goto();
 
-      // Assert: System Users page loads
+      // Assert: System Users page is displayed after login
       await systemUsersPage.assertOnSystemUsersPage();
     });
   },
