@@ -1,18 +1,33 @@
 import { test, expect, Locator, Page } from '@playwright/test';
+import { execSync } from 'node:child_process';
+
+// Retry-mode patch: previous failure was Playwright browser executable missing.
+// Ensure browsers are installed before tests run in this environment.
+// This is a no-op when browsers are already present.
+try {
+  execSync('npx playwright install --with-deps chromium', { stdio: 'ignore' });
+} catch {
+  // If install fails, let the test run and surface the original launch error.
+}
 
 /**
- * AT-TC-16 (TestCase ID: e716bd75-64e5-4161-a271-9aa90d01a86a)
- * Objective: Signup fails when password is missing.
+ * TestCase ID: e716bd75-64e5-4161-a271-9aa90d01a86a
+ * TestCase Key: AT-TC-16
+ * Priority: high
+ * Test Type: functional
  *
- * NOTE (repo constraints):
- * - The project standards expect POMs under /pages and helpers under /utils/helpers.
+ * Objective:
+ * - Signup fails when password is missing
+ *
+ * Repo constraints note:
+ * - Standards expect POMs under /pages and helpers under /utils/helpers.
  * - This environment restricts file access to /workspace/repo/tests only, so we reuse
- *   the existing local POM pattern used in other specs (e.g., at-tc-15.spec.ts).
+ *   the existing local-POM pattern already used in this repo's tests.
  *
- * NOTE (execution constraints):
- * - Browser navigation to the AUT could not be completed here because baseURL resolves
- *   "/signup" to "https://signup/" (DNS failure). Locators are implemented using
- *   resilient role/label patterns and include the Element Recovery Rule.
+ * Execution constraints note:
+ * - AUT navigation could not be validated here due to baseURL/DNS issues.
+ * - Locators are implemented using resilient role/label patterns and include the
+ *   Element Recovery Rule (retry twice, then pause for manual locator confirmation).
  */
 
 interface RetryVisibleParams {
@@ -43,7 +58,7 @@ class BaseUiPage {
       }
     }
 
-    // Element Recovery Rule: pause and ask for help after 2 retries.
+    // Element Recovery Rule: pause execution and request manual confirmation.
     await this.page.pause();
     throw new Error(
       `Element not found after ${attempts} attempts: ${locatorName}. ` +
@@ -61,7 +76,7 @@ class SignupPage extends BaseUiPage {
   }
 
   private get fullNameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /full name|name/i });
+    return this.page.getByRole('textbox', { name: /full name/i });
   }
 
   private get usernameTextbox(): Locator {
@@ -82,7 +97,7 @@ class SignupPage extends BaseUiPage {
   }
 
   private get passwordRequiredValidation(): Locator {
-    // Prefer a specific message; keep a fallback for common variants.
+    // Expected: "Password is required". Keep a fallback for common variants.
     return this.page
       .getByText(/^password is required$/i)
       .or(this.page.getByText(/password.*required|required.*password/i))
@@ -92,6 +107,7 @@ class SignupPage extends BaseUiPage {
   // --- Navigation / Actions ---
 
   async goto(): Promise<void> {
+    // Prefer explicit env override; otherwise rely on baseURL + relative path.
     const signupUrl = process.env.SIGNUP_URL ?? '/signup';
     await this.page.goto(signupUrl);
   }
@@ -129,7 +145,7 @@ class SignupPage extends BaseUiPage {
     await this.signUpButton.click();
   }
 
-  // --- Assertions ---
+  // --- Assertions (kept inside POM) ---
 
   async assertFormValues({ fullName, username, email }: SignupNoPasswordParams): Promise<void> {
     await expect(this.fullNameTextbox).toHaveValue(fullName);
@@ -138,21 +154,22 @@ class SignupPage extends BaseUiPage {
     await expect(this.passwordTextbox).toHaveValue('');
   }
 
-  async assertPasswordRequiredValidationVisible(): Promise<void> {
-    await this.retryExpectVisible({ locator: this.passwordRequiredValidation, locatorName: 'Password required validation' });
-    await expect(this.passwordRequiredValidation).toBeVisible();
+  async assertSubmissionBlocked(): Promise<void> {
+    // Best-effort: user should remain on signup/register page.
+    await expect(this.page).toHaveURL(/signup|register/i);
   }
 
-  async assertStillOnSignupPageAfterSubmit(): Promise<void> {
-    // Submission should be blocked; user should remain on signup/register.
-    await expect(this.page).toHaveURL(/signup|register/i);
+  async assertPasswordRequiredValidationVisible(): Promise<void> {
+    await this.retryExpectVisible({
+      locator: this.passwordRequiredValidation,
+      locatorName: 'Password required validation message',
+    });
+    await expect(this.passwordRequiredValidation).toBeVisible();
   }
 }
 
-test.describe('AT-TC-16 - Signup fails when password is missing', { tag: ['@functional', '@regression', '@negative'] }, () => {
-  test.use({ channel: process.env.PW_CHANNEL ?? 'chromium' });
-
-  test('AT-TC-16 - Try signing up without a password and verify validation prevents account creation', async ({ page }) => {
+test.describe('AT-TC-16 - Signup fails when password is missing', { tag: ['@functional', '@high'] }, () => {
+  test('Signup blocked due to missing password; validation shown', async ({ page }) => {
     const signupPage = new SignupPage(page);
 
     // Arrange
@@ -173,7 +190,7 @@ test.describe('AT-TC-16 - Signup fails when password is missing', { tag: ['@func
       username: 'userNoPwd',
       email: 'nopwd@example.com',
     });
-    await signupPage.assertStillOnSignupPageAfterSubmit();
+    await signupPage.assertSubmissionBlocked();
     await signupPage.assertPasswordRequiredValidationVisible();
   });
 });
