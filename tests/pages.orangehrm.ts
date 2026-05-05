@@ -140,7 +140,10 @@ export class OrangeHrmLoginPage {
     await this.usernameTextbox.fill(username);
     await this.passwordTextbox.fill(password);
     await this.loginButton.click();
-    await expect(this.page).toHaveURL(/\/web\/index\.php\/dashboard\/index/);
+
+    // After login, OrangeHRM may redirect either to the dashboard or back to the originally
+    // requested protected URL (when login was triggered by an auth guard).
+    await expect(this.page).toHaveURL(/\/web\/index\.php\/(dashboard\/index|admin\/viewSystemUsers)/);
   }
 
   async assertRedirectedToLoginFromProtectedPage(): Promise<void> {
@@ -245,44 +248,34 @@ export class OrangeHrmAdminSystemUsersPage {
   }
 
   private get resultsTable(): Locator {
-    return this.page.getByRole('table');
+    // OrangeHRM uses a div-based grid; role=table may not be present in all builds.
+    return this.page.locator('.oxd-table');
   }
 
   private get filtersForm(): Locator {
     // System Users filter form is the only <form> on the page in the demo.
-    // Do not scope by heading (the heading is outside the form), otherwise the locator resolves to 0.
     return this.page.locator('form');
   }
 
   private get resultsTableRows(): Locator {
-    return this.resultsTable.getByRole('row');
+    // Each record row is rendered as .oxd-table-card.
+    return this.resultsTable.locator('.oxd-table-card');
   }
 
   private get firstResultRow(): Locator {
-    // OrangeHRM renders the table as a single accessible row per record (no separate header row).
-    // So the first row is the first data row.
     return this.resultsTableRows.first();
   }
 
-  private get firstResultUsernameCell(): Locator {
-    // The Username value is nested inside the cell as a separate element.
-    // Target the cell by its accessible name prefix to avoid relying on column order.
-    return this.firstResultRow.getByRole('cell', { name: /Username/i });
-  }
-
   private get firstResultUsernameValue(): Locator {
-    // Within the Username cell, the actual username value is the second line.
-    return this.firstResultUsernameCell.getByText(/.+/).last();
+    // In the grid, the Username column is the 2nd cell.
+    return this.firstResultRow.locator('.oxd-table-cell').nth(1);
   }
 
   private get recordsFoundText(): Locator {
-    // Some OrangeHRM builds show "(N) Records Found".
     return this.page.getByText(/\(\d+\) Record(s)? Found/i);
   }
 
   private get noRecordsFoundTableEmptyStateText(): Locator {
-    // OrangeHRM can show "No Records Found" in the table empty state AND as a toast.
-    // Use a more specific locator to avoid strict-mode violations.
     return this.page.locator('span').filter({ hasText: 'No Records Found' }).first();
   }
 
@@ -307,8 +300,6 @@ export class OrangeHrmAdminSystemUsersPage {
   }
 
   async expandFilters(): Promise<void> {
-    // The filter panel can be collapsed by default depending on viewport/state.
-    // If the Username filter is not visible, expand the filters panel.
     if (!(await this.usernameFilterTextbox.isVisible())) {
       await expect(this.filtersToggleButton).toBeVisible();
       await expect(this.filtersToggleButton).toBeEnabled();
@@ -340,28 +331,24 @@ export class OrangeHrmAdminSystemUsersPage {
   }
 
   async assertNoRecordsFound(): Promise<void> {
-    // Prefer asserting the explicit empty-state message.
     await expect(this.noRecordsFoundTableEmptyStateText).toBeVisible();
-
-    // Also assert the results table is effectively empty.
-    // (Header rows may not be exposed in the accessibility tree; the rowgroup is present with no rows.)
     await expect(this.resultsTableRows).toHaveCount(0);
   }
 
   async assertExactlyOneUsernameResult(expectedUsername: string): Promise<void> {
-    await expect(this.resultsTable).toBeVisible();
     await expect(this.recordsFoundText).toBeVisible();
     await expect(this.recordsFoundText).toContainText('(1)');
 
-    await expect(this.firstResultUsernameCell).toBeVisible();
+    await expect(this.resultsTable).toBeVisible();
+    await expect(this.resultsTableRows).toHaveCount(1);
+
     await expect(this.firstResultUsernameValue).toBeVisible();
-    await expect(this.firstResultUsernameValue).toHaveText(expectedUsername);
+    await expect(this.firstResultUsernameValue).toHaveText(new RegExp(`^${expectedUsername}$`, 'i'));
   }
 
   async waitForResultsToLoad(): Promise<void> {
-    // Wait for results summary and first row username to be visible.
     await expect(this.recordsFoundText).toBeVisible();
-    await expect(this.firstResultUsernameCell).toBeVisible();
+    await expect(this.resultsTable).toBeVisible();
   }
 
   async assertSearchCompletedWithinMs({ maxMs, elapsedMs }: SearchPerformanceAssertionParams): Promise<void> {
