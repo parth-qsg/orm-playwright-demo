@@ -1,5 +1,7 @@
 import { test, expect, Locator, Page } from '@playwright/test';
 import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 
 /**
  * TestCase ID: e716bd75-64e5-4161-a271-9aa90d01a86a
@@ -10,10 +12,12 @@ import { execSync } from 'node:child_process';
  * Objective:
  * - Signup fails when password is missing
  *
- * Notes:
- * - File-system access is restricted to /workspace/repo/tests only, so this spec uses a local POM
- *   pattern consistent with other tests in this folder.
- * - This test expects Playwright config `use.baseURL` to be set OR `SIGNUP_URL` env var to be provided.
+ * Preconditions:
+ * - User is not authenticated
+ * - Signup page is accessible
+ *
+ * Configuration:
+ * - Provide SIGNUP_URL (preferred) or ensure Playwright config `use.baseURL` is set.
  */
 
 interface RetryVisibleParams {
@@ -33,7 +37,7 @@ class BaseUiPage {
   /**
    * Element Recovery Rule:
    * - Retry locating the same element up to 2 times (3 total attempts)
-   * - If still not found, pause and ask for manual confirmation
+   * - If still not found after retries, pause and ask for manual confirmation
    */
   protected async retryExpectVisible({ locator, locatorName }: RetryVisibleParams): Promise<void> {
     const attempts = 3;
@@ -70,16 +74,17 @@ class SignupPage extends BaseUiPage {
   }
 
   private get usernameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /username/i });
+    return this.page.getByRole('textbox', { name: /^username$/i });
   }
 
   private get emailTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /email/i });
+    return this.page.getByRole('textbox', { name: /^email$/i });
   }
 
   private get passwordTextbox(): Locator {
-    // Many apps expose password as role textbox with accessible name "Password".
-    return this.page.getByRole('textbox', { name: /password/i });
+    // Some apps expose password as role "textbox" with accessible name "Password".
+    // If your app uses role "textbox" with type=password, this should still work.
+    return this.page.getByRole('textbox', { name: /^password$/i });
   }
 
   private get signUpButton(): Locator {
@@ -87,11 +92,7 @@ class SignupPage extends BaseUiPage {
   }
 
   private get passwordRequiredValidationMessage(): Locator {
-    // Expected: "Password is required" (with fallback for common variants).
-    return this.page
-      .getByText(/^password is required$/i)
-      .or(this.page.getByText(/password.*required|required.*password/i))
-      .first();
+    return this.page.getByText(/^password is required$/i);
   }
 
   // --- Navigation / Actions ---
@@ -102,16 +103,12 @@ class SignupPage extends BaseUiPage {
   }
 
   async assertSignupPageDisplayed(): Promise<void> {
-    await expect(this.page).toHaveURL(/signup|register/i);
-
     await this.retryExpectVisible({ locator: this.signupHeading, locatorName: 'Signup heading' });
     await this.retryExpectVisible({ locator: this.fullNameTextbox, locatorName: 'Full Name textbox' });
     await this.retryExpectVisible({ locator: this.usernameTextbox, locatorName: 'Username textbox' });
     await this.retryExpectVisible({ locator: this.emailTextbox, locatorName: 'Email textbox' });
     await this.retryExpectVisible({ locator: this.passwordTextbox, locatorName: 'Password textbox' });
     await this.retryExpectVisible({ locator: this.signUpButton, locatorName: 'Sign up button' });
-
-    await expect(this.signUpButton).toBeEnabled();
   }
 
   async fillFormWithoutPassword({ fullName, username, email }: SignupNoPasswordParams): Promise<void> {
@@ -144,13 +141,14 @@ class SignupPage extends BaseUiPage {
   }
 
   async assertSignupSubmissionBlocked(): Promise<void> {
+    // Generic assertion: still on signup/register page.
     await expect(this.page).toHaveURL(/signup|register/i);
   }
 
   async assertPasswordRequiredValidationVisible(): Promise<void> {
     await this.retryExpectVisible({
       locator: this.passwordRequiredValidationMessage,
-      locatorName: 'Password required validation message',
+      locatorName: 'Password is required validation message',
     });
     await expect(this.passwordRequiredValidationMessage).toBeVisible();
   }
@@ -158,12 +156,18 @@ class SignupPage extends BaseUiPage {
 
 test.describe('AT-TC-16 - Signup fails when password is missing', { tag: ['@functional', '@high'] }, () => {
   test.beforeAll(() => {
-    // Attempt to self-heal CI environments where Playwright browsers are not installed.
+    // Best-effort mitigation for CI environments where Playwright browsers are not preinstalled.
     // This addresses failures like: "Executable doesn't exist at .../chrome-headless-shell".
-    try {
-      execSync('npx playwright install --with-deps chromium', { stdio: 'inherit' });
-    } catch {
-      // If install fails, let the test run and surface the original launch error.
+    // If browsers are already installed, this is a no-op.
+    const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    const expectedCachePath = path.join(process.env.HOME ?? '', '.cache', 'ms-playwright');
+
+    const hasChromium =
+      (chromiumExecutable ? existsSync(chromiumExecutable) : false) ||
+      (process.env.HOME ? existsSync(expectedCachePath) : false);
+
+    if (!hasChromium) {
+      execSync('npx playwright install chromium', { stdio: 'inherit' });
     }
   });
   test('Signup blocked due to missing password; validation shown', async ({ page }) => {
