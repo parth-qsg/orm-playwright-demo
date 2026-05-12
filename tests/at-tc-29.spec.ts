@@ -4,7 +4,6 @@ class AuthenticatedApp {
   constructor(private readonly page: Page) {}
 
   private get userMenuTrigger(): Locator {
-    // Prefer explicit user-facing controls; fall back to common patterns.
     return this.page
       .getByRole('button', { name: /account|profile|user|menu/i })
       .or(this.page.getByRole('link', { name: /account|profile/i }))
@@ -20,7 +19,9 @@ class AuthenticatedApp {
   }
 
   private get loginCta(): Locator {
-    return this.page.getByRole('link', { name: /log in|login|sign in/i });
+    return this.page
+      .getByRole('link', { name: /log in|login|sign in/i })
+      .or(this.page.getByRole('button', { name: /log in|login|sign in/i }));
   }
 
   async gotoHome(): Promise<void> {
@@ -28,7 +29,7 @@ class AuthenticatedApp {
     test.skip(!baseUrl, 'Missing BASE_URL environment variable for UI tests.');
 
     const root = baseUrl.replace(/\/$/, '');
-    await this.page.goto(`${root}/`);
+    await this.page.goto(`${root}/`, { waitUntil: 'domcontentloaded' });
   }
 
   async loginWithEnvCredentials(): Promise<void> {
@@ -41,16 +42,25 @@ class AuthenticatedApp {
 
     const root = baseUrl.replace(/\/$/, '');
 
-    // If already authenticated (common in CI with persisted storage), skip login.
-    await this.page.goto(`${root}/`);
+    await this.page.goto(`${root}/`, { waitUntil: 'domcontentloaded' });
     if (await this.isAuthenticated().catch(() => false)) return;
 
-    // Try common login routes.
     const loginPaths = ['/login', '/signin', '/sign-in', '/auth/login'];
+
+    // If the app exposes a login entry point on the home page, use it first.
+    if ((await this.loginCta.count().catch(() => 0)) > 0) {
+      await this.loginCta.first().click();
+      await this.page.waitForLoadState('domcontentloaded');
+    }
+
     const usernameField = this.page
       .getByLabel(/email|e-mail|username|user name/i)
       .or(this.page.getByPlaceholder(/email|e-mail|username/i))
-      .or(this.page.locator('input[type="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]'));
+      .or(
+        this.page.locator(
+          'input[type="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]',
+        ),
+      );
 
     const passwordField = this.page
       .getByLabel(/password/i)
@@ -58,21 +68,30 @@ class AuthenticatedApp {
       .or(this.page.locator('input[type="password"], input[autocomplete="current-password"]'));
 
     for (const p of loginPaths) {
-      await this.page.goto(`${root}${p}`);
+      if ((await usernameField.count().catch(() => 0)) > 0) break;
+      await this.page.goto(`${root}${p}`, { waitUntil: 'domcontentloaded' });
       if ((await usernameField.count().catch(() => 0)) > 0) break;
     }
 
-    await expect(usernameField).toBeVisible({ timeout: 15000 });
-    await usernameField.fill(username);
+    // Some apps use a single identifier field ("Email or username") without an email-type input.
+    const identifierField = usernameField.or(
+      this.page
+        .getByLabel(/identifier|user id|login|email or username/i)
+        .or(this.page.getByPlaceholder(/email or username|username or email|login/i))
+        .or(this.page.locator('input[type="text"], input[autocomplete="on"], input[name*="login" i], input[id*="login" i]')),
+    );
 
-    await expect(passwordField).toBeVisible({ timeout: 15000 });
-    await passwordField.fill(password);
+    await expect(identifierField.first()).toBeVisible({ timeout: 15000 });
+    await identifierField.first().fill(username);
+
+    await expect(passwordField.first()).toBeVisible({ timeout: 15000 });
+    await passwordField.first().fill(password);
 
     const submit = this.page
       .getByRole('button', { name: /log in|login|sign in|continue/i })
       .or(this.page.getByRole('button', { name: /submit/i }));
-    await expect(submit).toBeEnabled();
-    await submit.click();
+    await expect(submit.first()).toBeEnabled();
+    await submit.first().click();
 
     await this.assertAuthenticated();
   }
@@ -85,30 +104,25 @@ class AuthenticatedApp {
   }
 
   async assertAuthenticated(): Promise<void> {
-    // Primary: logout is visible (possibly after opening user menu).
     if (await this.logoutControl.isVisible().catch(() => false)) {
       await expect(this.logoutControl).toBeVisible();
       return;
     }
 
-    // Secondary: open user menu and look for logout.
     if (await this.userMenuTrigger.isVisible().catch(() => false)) {
       await this.userMenuTrigger.click();
       await expect(this.logoutControl).toBeVisible();
       return;
     }
 
-    // Tertiary: ensure we are not seeing login CTA.
     await expect(this.loginCta).toHaveCount(0);
   }
 
   async refreshAndWaitForReady(): Promise<void> {
-    await this.page.reload();
-    await this.page.waitForLoadState('domcontentloaded');
+    await this.page.reload({ waitUntil: 'domcontentloaded' });
   }
 
   async navigateToAnotherPageAndAssertSessionPersists(): Promise<void> {
-    // Prefer a deterministic navigation target if present.
     const candidates: Array<{ name: RegExp; path: string }> = [
       { name: /dashboard/i, path: '/dashboard' },
       { name: /profile|account/i, path: '/profile' },
@@ -125,13 +139,11 @@ class AuthenticatedApp {
       }
     }
 
-    // Fallback: direct navigation to a common authenticated page.
     const baseUrl = process.env.BASE_URL;
     test.skip(!baseUrl, 'Missing BASE_URL environment variable for UI tests.');
     const root = baseUrl.replace(/\/$/, '');
 
-    await this.page.goto(`${root}/dashboard`);
-    await this.page.waitForLoadState('domcontentloaded');
+    await this.page.goto(`${root}/dashboard`, { waitUntil: 'domcontentloaded' });
     await this.assertAuthenticated();
   }
 }
@@ -142,7 +154,7 @@ test.describe('AT-TC-29 - Verify user remains logged in after refreshing the pag
   test('AT-TC-29 - Session persists after refresh and navigation', async ({ page }) => {
     const app = new AuthenticatedApp(page);
 
-    // Arrange (precondition: user is authenticated). We satisfy it via env-based login.
+    // Arrange (precondition: user is authenticated after signup). We satisfy it via env-based authentication.
     await app.loginWithEnvCredentials();
     await app.gotoHome();
     await app.assertAuthenticated();
