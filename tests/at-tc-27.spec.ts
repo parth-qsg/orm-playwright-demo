@@ -15,9 +15,7 @@ type HealthAssertions = {
 
 function getApiBaseUrl(): string {
   const baseUrl = process.env.API_BASE_URL ?? process.env.BASE_URL;
-  if (!baseUrl) {
-    throw new Error('Missing API base URL. Set API_BASE_URL (preferred) or BASE_URL.');
-  }
+  if (!baseUrl) throw new Error('Missing API base URL. Set API_BASE_URL (preferred) or BASE_URL.');
   return baseUrl.replace(/\/$/, '');
 }
 
@@ -145,13 +143,15 @@ class HealthApi {
   ) {}
 
   async getHealth(): Promise<{ response: APIResponse; body: JsonRecord; pathUsed: string }> {
-    const candidatePaths = [
-      normalizePath(process.env.HEALTH_PATH ?? '/health'),
-      '/health',
-      '/actuator/health',
-      '/api/health',
-      '/api/v1/health',
-    ];
+    const configuredPath = (process.env.HEALTH_PATH ?? '').trim();
+    if (!configuredPath) {
+      throw new Error(
+        `HEALTH_PATH is not configured. This test requires an explicit health endpoint path (e.g., '/actuator/health'). ` +
+          `Set HEALTH_PATH and optionally HEALTH_BASE_URL/HEALTH_BASE_PATH.`,
+      );
+    }
+
+    const candidatePaths = [normalizePath(configuredPath)];
 
     let lastResponse: APIResponse | undefined;
     let lastBodyText = '';
@@ -180,8 +180,6 @@ class HealthApi {
       if (/<!doctype html>|<html[\s>]/i.test(lastBodyText)) continue;
     }
 
-    // Patch for environments where the health endpoint is not exposed at the default paths.
-    // In that case, fail with a clear configuration error instead of a generic 404/HTML parse error.
     const status = lastResponse?.status();
     const ct = lastResponse?.headers()['content-type'] ?? '';
     if (status === 404) {
@@ -218,9 +216,7 @@ class HealthApi {
   }
 
   assertHealth(extracted: HealthAssertions, opts: { slaMs: number; criticalServices: string[] }): void {
-    if (extracted.overallStatus) {
-      expect(extracted.overallStatus, "Overall health status is 'UP'").toBe('UP');
-    }
+    if (extracted.overallStatus) expect(extracted.overallStatus, "Overall health status is 'UP'").toBe('UP');
 
     if (opts.criticalServices.length > 0) {
       for (const svc of opts.criticalServices) {
