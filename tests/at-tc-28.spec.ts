@@ -4,7 +4,6 @@ class SignupPage {
   constructor(private readonly page: Page) {}
 
   private get emailTextbox(): Locator {
-    // Prefer stable, semantic locators but include common auth-provider variants.
     return this.page
       .getByLabel(/email/i)
       .or(this.page.getByPlaceholder(/email/i))
@@ -40,7 +39,7 @@ class SignupPage {
     );
   }
 
-  private get homeAuthenticatedMarker(): Locator {
+  private get authenticatedMarker(): Locator {
     return this.page
       .getByRole('button', { name: /log out|logout|sign out/i })
       .or(this.page.getByRole('link', { name: /log out|logout|sign out/i }))
@@ -65,8 +64,16 @@ class SignupPage {
 
     for (const url of candidates) {
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
+      await this.page.waitForLoadState('networkidle').catch(() => undefined);
 
-      // Wait for either a form or any plausible email/username field to appear.
+      // Some apps render signup inside a modal opened from a CTA.
+      const openSignupCta = this.page
+        .getByRole('link', { name: /sign up|signup|create account|register/i })
+        .or(this.page.getByRole('button', { name: /sign up|signup|create account|register/i }));
+      if ((await openSignupCta.count().catch(() => 0)) > 0) {
+        await openSignupCta.first().click().catch(() => undefined);
+      }
+
       await Promise.race([
         this.page.waitForSelector('form', { state: 'visible', timeout: 12000 }).catch(() => undefined),
         this.page
@@ -78,9 +85,7 @@ class SignupPage {
           .catch(() => undefined),
       ]);
 
-      const emailCount = await this.emailTextbox.count().catch(() => 0);
-      if (emailCount > 0) {
-        await expect(this.emailTextbox.first()).toBeVisible({ timeout: 12000 });
+      if (await this.emailTextbox.first().isVisible().catch(() => false)) {
         return;
       }
     }
@@ -103,9 +108,7 @@ class SignupPage {
   }
 
   async fillNameIfPresent(name: string): Promise<void> {
-    if ((await this.nameTextbox.count().catch(() => 0)) > 0) {
-      await this.nameTextbox.fill(name);
-    }
+    if ((await this.nameTextbox.count().catch(() => 0)) > 0) await this.nameTextbox.fill(name);
   }
 
   async submit(): Promise<void> {
@@ -122,7 +125,7 @@ class SignupPage {
   }
 
   async assertUnauthenticated(): Promise<void> {
-    await expect(this.homeAuthenticatedMarker).toHaveCount(0);
+    await expect(this.authenticatedMarker).toHaveCount(0);
     await expect(this.authCta.first()).toBeVisible();
   }
 }
