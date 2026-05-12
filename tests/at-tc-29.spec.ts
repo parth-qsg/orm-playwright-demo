@@ -45,14 +45,12 @@ class AuthenticatedApp {
     await this.page.goto(`${root}/`, { waitUntil: 'domcontentloaded' });
     if (await this.isAuthenticated().catch(() => false)) return;
 
-    // Navigate to a login surface if present.
     const loginPaths = ['/login', '/signin', '/sign-in', '/auth/login'];
 
     if ((await this.loginCta.count().catch(() => 0)) > 0) {
       await this.loginCta.first().click();
       await this.page.waitForLoadState('domcontentloaded');
     } else {
-      // If no obvious CTA exists on home, try common login routes.
       for (const p of loginPaths) {
         await this.page.goto(`${root}${p}`, { waitUntil: 'domcontentloaded' });
         if ((await this.page.getByRole('heading', { name: /log in|login|sign in/i }).count().catch(() => 0)) > 0) break;
@@ -73,14 +71,12 @@ class AuthenticatedApp {
       .or(this.page.getByPlaceholder(/password/i))
       .or(this.page.locator('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]'));
 
-    // Some apps render the login form inside an iframe.
     const frames = this.page.frames();
     const frameWithIdentifier = frames.find((f) => f !== this.page.mainFrame());
-    const identifierInMain = identifierField.first();
 
-    if ((await identifierInMain.count().catch(() => 0)) > 0) {
-      await expect(identifierInMain).toBeVisible({ timeout: 15000 });
-      await identifierInMain.fill(username);
+    if ((await identifierField.first().count().catch(() => 0)) > 0) {
+      await expect(identifierField.first()).toBeVisible({ timeout: 15000 });
+      await identifierField.first().fill(username);
       await expect(passwordField.first()).toBeVisible({ timeout: 15000 });
       await passwordField.first().fill(password);
     } else if (frameWithIdentifier) {
@@ -107,7 +103,6 @@ class AuthenticatedApp {
       await this.assertAuthenticated();
       return;
     } else {
-      // If we can't find a login form, skip rather than fail the session persistence assertions.
       test.skip(true, 'Login form not found (no identifier field visible).');
     }
 
