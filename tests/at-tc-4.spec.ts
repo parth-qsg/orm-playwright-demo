@@ -32,17 +32,13 @@ test.describe(
       });
 
       // Assert
-      // Some deployments may not allow DELETE (405) or may return 404 if the resource doesn't exist.
-      // The core objective is that PB123 cannot be retrieved afterwards.
-      const deleteStatus = deleteResponse.status();
+      // Some deployments may not allow DELETE and return 405 (Method Not Allowed).
+      // Keep the testcase intent (DELETE should succeed) but provide a clearer failure.
       expect(
-        [204, 404, 405],
-        `Unexpected DELETE status ${deleteStatus}. Expected 204 (deleted), 404 (already absent), or 405 (method not allowed).`,
-      ).toContain(deleteStatus);
-
-      if (deleteStatus === 204) {
-        await expectNoContent(deleteResponse);
-      }
+        deleteResponse.status(),
+        `Response status is 204 (received ${deleteResponse.status()}). If 405, ensure DELETE is enabled for /powerbanks/{id}.`,
+      ).toBe(204);
+      await expectNoContent(deleteResponse);
 
       // Act
       const getResponse = await request.get(`/powerbanks/${powerBankId}`, {
