@@ -148,9 +148,11 @@ class HealthApi {
           ]
     ).map((p) => (p.startsWith('/') ? p : `/${p}`));
 
+    // Some deployments expose health at the base URL itself (e.g., API_BASE_URL already includes /health).
+    // If baseUrl returns 404, we still try common health paths.
     const candidateUrls: Array<{ url: string; pathUsed: string }> = [
-      { url: this.baseUrl, pathUsed: '(baseUrl)' },
       ...healthPaths.map((p) => ({ url: `${this.baseUrl}${p}`, pathUsed: p })),
+      { url: this.baseUrl, pathUsed: '(baseUrl)' },
     ];
 
     let lastResponse: APIResponse | undefined;
@@ -163,8 +165,6 @@ class HealthApi {
       lastResponse = res;
       if (res.status() === 404) continue;
 
-      // Some apps return HTML (SPA/login) for unknown routes or when not authenticated.
-      // Treat non-JSON responses as a non-match and try the next candidate path.
       try {
         const body = await parseJsonSafely<JsonRecord>(res);
         return { response: res, body, pathUsed: candidate.pathUsed };
