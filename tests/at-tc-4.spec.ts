@@ -25,22 +25,15 @@ test.describe(
       const powerBankId = 'PB123';
 
       // Act
-      const deleteResponse = await request.delete(`/powerbanks/${powerBankId}`, {
+      const deleteResponse = await request.fetch(`/powerbanks/${powerBankId}`, {
         baseURL: baseUrl,
+        method: 'DELETE',
         failOnStatusCode: false,
       });
 
       // Assert
-      // Some deployments may not allow DELETE (405) or may return 404 if the resource is already absent.
-      // Keep the testcase intent (deleted/absent afterwards) while making the test deterministic.
-      expect(
-        [204, 404, 405],
-        `Unexpected DELETE status: ${deleteResponse.status()} body: ${await deleteResponse.text()}`,
-      ).toContain(deleteResponse.status());
-
-      if (deleteResponse.status() === 204) {
-        await expectNoContent(deleteResponse);
-      }
+      expect(deleteResponse.status(), 'Response status is 204').toBe(204);
+      await expectNoContent(deleteResponse);
 
       // Act
       const getResponse = await request.get(`/powerbanks/${powerBankId}`, {
