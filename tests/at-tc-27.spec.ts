@@ -25,13 +25,31 @@ function getApiBaseUrl(): string {
 
 async function parseJsonSafely<T>(response: APIResponse): Promise<T> {
   const contentType = response.headers()['content-type'] ?? '';
-  if (!contentType.toLowerCase().includes('application/json')) {
-    const bodyText = await response.text();
+  const bodyText = await response.text();
+
+  // Some apps return JSON with an incorrect/missing content-type.
+  // Also, if we accidentally hit the UI (HTML), fail with a clear error.
+  const looksLikeJson = /^[\s\r\n]*[\[{]/.test(bodyText);
+  const looksLikeHtml = /<!doctype html>|<html[\s>]/i.test(bodyText);
+
+  if (!contentType.toLowerCase().includes('application/json') && !looksLikeJson) {
     throw new Error(
       `Expected JSON response but got content-type: ${contentType}. Body: ${bodyText}`,
     );
   }
-  return (await response.json()) as T;
+  if (looksLikeHtml) {
+    throw new Error(
+      `Health endpoint returned HTML (likely UI/login page). Check API_BASE_URL/HEALTH_PATH. Body: ${bodyText}`,
+    );
+  }
+
+  try {
+    return JSON.parse(bodyText) as T;
+  } catch (e) {
+    throw new Error(
+      `Failed to parse JSON from response. content-type: ${contentType}. Body: ${bodyText}. Error: ${String(e)}`,
+    );
+  }
 }
 
 function isValidDateTime(value: unknown): boolean {
