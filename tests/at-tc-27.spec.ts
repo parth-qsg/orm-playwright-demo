@@ -144,10 +144,12 @@ class HealthApi {
 
   async getHealth(): Promise<{ response: APIResponse; body: JsonRecord; pathUsed: string }> {
     const configuredPath = (process.env.HEALTH_PATH ?? '').trim();
+
+    // In this repo, BASE_URL may point to a UI host (e.g., demo site) that doesn't expose a health endpoint.
+    // To keep the test deterministic, require explicit configuration when HEALTH_PATH isn't provided.
     if (!configuredPath) {
       throw new Error(
-        `HEALTH_PATH is not configured. This test requires an explicit health endpoint path (e.g., '/actuator/health'). ` +
-          `Set HEALTH_PATH and optionally HEALTH_BASE_URL/HEALTH_BASE_PATH.`,
+        `HEALTH_PATH is not configured. Set HEALTH_PATH (e.g., '/actuator/health') and optionally HEALTH_BASE_URL/HEALTH_BASE_PATH to point to the API host. Current base URL: ${this.baseUrl}`,
       );
     }
 
@@ -184,16 +186,14 @@ class HealthApi {
     const ct = lastResponse?.headers()['content-type'] ?? '';
     if (status === 404) {
       throw new Error(
-        `Health endpoint not found (404) at any known path. Configure HEALTH_PATH (e.g., '/actuator/health') and/or HEALTH_BASE_URL/HEALTH_BASE_PATH. Tried: ${candidatePaths.join(
+        `Health endpoint not found (404). Configure HEALTH_PATH (e.g., '/actuator/health') and/or HEALTH_BASE_URL/HEALTH_BASE_PATH. Tried: ${candidatePaths.join(
           ', ',
         )}. Base URL: ${this.baseUrl}. Last content-type: ${ct}. Last body: ${lastBodyText}`,
       );
     }
 
     throw new Error(
-      `Unable to retrieve JSON health payload from any known path. Tried: ${candidatePaths.join(
-        ', ',
-      )}. Last status: ${status}. Last content-type: ${ct}. Last body: ${lastBodyText}`,
+      `Unable to retrieve JSON health payload. Tried: ${candidatePaths.join(', ')}. Last status: ${status}. Last content-type: ${ct}. Last body: ${lastBodyText}`,
     );
   }
 
