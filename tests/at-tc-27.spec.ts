@@ -23,6 +23,17 @@ function getApiBaseUrl(): string {
   return baseUrl.replace(/\/$/, '');
 }
 
+function getHealthBaseUrl(apiBaseUrl: string): string {
+  const healthBaseUrl = (process.env.HEALTH_BASE_URL ?? '').trim();
+  if (healthBaseUrl) return healthBaseUrl.replace(/\/$/, '');
+
+  const healthBasePath = (process.env.HEALTH_BASE_PATH ?? '').trim();
+  if (!healthBasePath) return apiBaseUrl;
+
+  const normalized = healthBasePath.startsWith('/') ? healthBasePath : `/${healthBasePath}`;
+  return `${apiBaseUrl}${normalized}`.replace(/\/$/, '');
+}
+
 function normalizePath(path: string): string {
   const trimmed = path.trim();
   if (!trimmed) return '/health';
@@ -155,14 +166,12 @@ class HealthApi {
       });
       lastResponse = res;
 
-      // Fast-path: if JSON, parse and return.
       const contentType = res.headers()['content-type'] ?? '';
       if (contentType.toLowerCase().includes('application/json')) {
         const body = await parseJsonSafely<JsonRecord>(res);
         return { response: res, body, pathUsed: path };
       }
 
-      // If 404 or HTML, try next candidate.
       lastBodyText = await res.text();
       const looksLikeJson = /^[\s\r\n]*[\[{]/.test(lastBodyText);
       if (looksLikeJson) {
@@ -251,7 +260,8 @@ class HealthApi {
 test.describe('AT-TC-27 - API - Health check', { tag: ['@functional', '@regression'] }, () => {
   test('GET /health reports critical services UP with SLA latency and audit fields', async ({ request }) => {
     // Arrange
-    const baseUrl = getApiBaseUrl();
+    const apiBaseUrl = getApiBaseUrl();
+    const baseUrl = getHealthBaseUrl(apiBaseUrl);
     const slaMs = Number(process.env.HEALTH_SLA_MS ?? '500');
     if (!Number.isFinite(slaMs) || slaMs <= 0) {
       throw new Error('Invalid HEALTH_SLA_MS. Provide a positive number (milliseconds).');
