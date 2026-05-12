@@ -2,6 +2,17 @@ import { test, expect, APIResponse } from '@playwright/test';
 
 type JsonRecord = Record<string, unknown>;
 
+type ServiceStatus = { name: string; status: string };
+
+type HealthAssertions = {
+  overallStatus?: string;
+  services: ServiceStatus[];
+  latencyMs?: number;
+  timestamp?: string;
+  reportSource?: string;
+  reportedBy?: string;
+};
+
 function getApiBaseUrl(): string {
   const baseUrl = process.env.API_BASE_URL ?? process.env.BASE_URL;
   if (!baseUrl) {
@@ -58,8 +69,8 @@ function getStringField(obj: JsonRecord, keys: string[]): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
-function collectServiceStatuses(body: JsonRecord): Array<{ name: string; status: string }> {
-  const results: Array<{ name: string; status: string }> = [];
+function collectServiceStatuses(body: JsonRecord): ServiceStatus[] {
+  const results: ServiceStatus[] = [];
 
   // Common shapes:
   // 1) Spring Boot actuator: { status: 'UP', components: { db: { status: 'UP' }, ... } }
@@ -105,10 +116,120 @@ function collectServiceStatuses(body: JsonRecord): Array<{ name: string; status:
   return results;
 }
 
+class HealthApi {
+  constructor(private readonly request: test.APIRequestContext, private readonly baseUrl: string) {}
+
+  async getHealth(): Promise<{ response: APIResponse; body: JsonRecord; pathUsed: string }> {
+    const configuredPath = (process.env.HEALTH_PATH ?? '').trim();
+    const healthPaths = (
+      configuredPath
+        ? [configuredPath]
+        : [
+            '/health',
+            '/actuator/health',
+            '/api/health',
+            '/api/actuator/health',
+            '/api/v1/health',
+            '/api/v1/actuator/health',
+            '/status/health',
+            '/healthz',
+            '/readyz',
+            '/livez',
+          ]
+    ).map((p) => (p.startsWith('/') ? p : `/${p}`));
+
+    let lastResponse: APIResponse | undefined;
+    for (const path of healthPaths) {
+      const res = await this.request.get(`${this.baseUrl}${path}`);
+      lastResponse = res;
+      if (res.status() === 404) continue;
+
+      // Some platforms return 200 with text/html for error pages; fail with diagnostics.
+      const body = await parseJsonSafely<JsonRecord>(res);
+      return { response: res, body, pathUsed: path };
+    }
+
+    const bodyText = lastResponse ? await lastResponse.text() : '';
+    throw new Error(
+      `Health endpoint not found. Set HEALTH_PATH env var to the correct endpoint. Tried: ${healthPaths.join(
+        ', ',
+      )}. Last status: ${lastResponse?.status()}. Body: ${bodyText}`,
+    );
+  }
+
+  extractAssertions(body: JsonRecord): HealthAssertions {
+    return {
+      overallStatus: getStringField(body, ['status', 'state']),
+      services: collectServiceStatuses(body),
+      latencyMs: getNumberField(body, [
+        'latencyMs',
+        'latency',
+        'responseTimeMs',
+        'responseTime',
+        'durationMs',
+        'duration',
+      ]),
+      timestamp: getStringField(body, ['timestamp', 'time', 'reportedAt', 'generatedAt']),
+      reportSource: getStringField(body, ['reportSource', 'source']),
+      reportedBy: getStringField(body, ['reportedBy', 'reporter', 'reported_by']),
+    };
+  }
+
+  assertHealth(
+    extracted: HealthAssertions,
+    opts: { slaMs: number; criticalServices: string[] },
+  ): void {
+    if (extracted.overallStatus) {
+      expect(extracted.overallStatus, "Overall health status is 'UP'").toBe('UP');
+    }
+
+    if (opts.criticalServices.length > 0) {
+      for (const svc of opts.criticalServices) {
+        const match = extracted.services.find((s) => s.name.toLowerCase() === svc.toLowerCase());
+        expect(match, `Critical service '${svc}' is present in health payload`).toBeTruthy();
+        expect(match?.status, `Critical service '${svc}' status is 'UP'`).toBe('UP');
+      }
+    } else {
+      expect(
+        extracted.services.length,
+        'Health payload exposes at least one service/component status',
+      ).toBeGreaterThan(0);
+      for (const svc of extracted.services) {
+        expect(svc.status, `Service '${svc.name}' status is 'UP'`).toBe('UP');
+      }
+    }
+
+    expect(
+      extracted.latencyMs,
+      "Health payload includes a numeric latency field (e.g., 'latencyMs')",
+    ).toBeDefined();
+    expect(extracted.latencyMs as number, `Reported latency is <= SLA (${opts.slaMs}ms)`).toBeLessThanOrEqual(
+      opts.slaMs,
+    );
+
+    expect(extracted.timestamp, "Health payload includes a timestamp field (e.g., 'timestamp')").toBeTruthy();
+    expect(isValidDateTime(extracted.timestamp), 'Timestamp is a valid date-time string').toBe(true);
+
+    expect(
+      extracted.reportSource,
+      "Health payload includes auditable field 'reportSource' (or equivalent)",
+    ).toBeTruthy();
+    expect(extracted.reportSource?.trim().length, "'reportSource' is non-empty").toBeGreaterThan(0);
+
+    expect(
+      extracted.reportedBy,
+      "Health payload includes auditable field 'reportedBy' (or equivalent)",
+    ).toBeTruthy();
+    expect(extracted.reportedBy?.trim().length, "'reportedBy' is non-empty").toBeGreaterThan(0);
+  }
+}
+
 test.describe('AT-TC-27 - API - Health check reports critical services UP with SLA latency and audit fields', {
   tag: ['@functional', '@regression'],
 }, () => {
-  test('GET /health validates status, critical services, latency SLA, timestamp, and audit fields', async ({ request }) => {
+  test('GET /health validates status, critical services, latency SLA, timestamp, and audit fields', async ({
+    request,
+  }) => {
     // Arrange
     const baseUrl = getApiBaseUrl();
     const slaMs = Number(process.env.HEALTH_SLA_MS ?? '500');
@@ -118,74 +239,21 @@ test.describe('AT-TC-27 - API - Health check reports critical services UP with S
 
     const criticalServicesEnv = (process.env.HEALTH_CRITICAL_SERVICES ?? '').trim();
     const criticalServices = criticalServicesEnv
-      ? criticalServicesEnv.split(',').map((s) => s.trim()).filter(Boolean)
+      ? criticalServicesEnv
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [];
 
-    // Act
-    // Try common health endpoints. Some deployments mount APIs under a prefix (e.g., /api).
-    const healthPaths = [
-      '/health',
-      '/actuator/health',
-      '/api/health',
-      '/api/actuator/health',
-    ];
+    const healthApi = new HealthApi(request, baseUrl);
 
-    let response: APIResponse | undefined;
-    let lastStatus: number | undefined;
-    for (const path of healthPaths) {
-      response = await request.get(`${baseUrl}${path}`);
-      lastStatus = response.status();
-      if (lastStatus !== 404) break;
-    }
+    // Act
+    const { response, body, pathUsed } = await healthApi.getHealth();
 
     // Assert
-    expect(lastStatus, `HTTP 200 OK is returned from one of: ${healthPaths.join(', ')}`).toBe(200);
+    expect(response.status(), `HTTP 200 OK is returned from ${pathUsed}`).toBe(200);
 
-    const body = await parseJsonSafely<JsonRecord>(response);
-
-    // Overall status (common in many health endpoints)
-    const overallStatus = getStringField(body, ['status', 'state']);
-    if (overallStatus) {
-      expect(overallStatus, "Overall health status is 'UP'").toBe('UP');
-    }
-
-    // Critical services
-    const serviceStatuses = collectServiceStatuses(body);
-    if (criticalServices.length > 0) {
-      for (const svc of criticalServices) {
-        const match = serviceStatuses.find((s) => s.name.toLowerCase() === svc.toLowerCase());
-        expect(match, `Critical service '${svc}' is present in health payload`).toBeTruthy();
-        expect(match?.status, `Critical service '${svc}' status is 'UP'`).toBe('UP');
-      }
-    } else {
-      // If no explicit list is provided, at least ensure we found some services and all are UP.
-      expect(serviceStatuses.length, 'Health payload exposes at least one service/component status').toBeGreaterThan(0);
-      for (const svc of serviceStatuses) {
-        expect(svc.status, `Service '${svc.name}' status is 'UP'`).toBe('UP');
-      }
-    }
-
-    // Latency SLA (reported by API)
-    const latencyMs = getNumberField(body, ['latencyMs', 'latency', 'responseTimeMs', 'responseTime', 'durationMs', 'duration']);
-    expect(
-      latencyMs,
-      "Health payload includes a numeric latency field (e.g., 'latencyMs')",
-    ).toBeDefined();
-    expect(latencyMs as number, `Reported latency is <= SLA (${slaMs}ms)`).toBeLessThanOrEqual(slaMs);
-
-    // Timestamp
-    const timestamp = getStringField(body, ['timestamp', 'time', 'reportedAt', 'generatedAt']);
-    expect(timestamp, "Health payload includes a timestamp field (e.g., 'timestamp')").toBeTruthy();
-    expect(isValidDateTime(timestamp), 'Timestamp is a valid date-time string').toBe(true);
-
-    // Audit fields
-    const reportSource = getStringField(body, ['reportSource', 'source']);
-    const reportedBy = getStringField(body, ['reportedBy', 'reporter', 'reported_by']);
-
-    expect(reportSource, "Health payload includes auditable field 'reportSource' (or equivalent)").toBeTruthy();
-    expect(reportSource?.trim().length, "'reportSource' is non-empty").toBeGreaterThan(0);
-
-    expect(reportedBy, "Health payload includes auditable field 'reportedBy' (or equivalent)").toBeTruthy();
-    expect(reportedBy?.trim().length, "'reportedBy' is non-empty").toBeGreaterThan(0);
+    const extracted = healthApi.extractAssertions(body);
+    healthApi.assertHealth(extracted, { slaMs, criticalServices });
   });
 });
