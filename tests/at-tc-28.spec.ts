@@ -7,21 +7,23 @@ class SignupPage {
     return this.page
       .getByLabel(/email/i)
       .or(this.page.getByPlaceholder(/email/i))
-      .or(this.page.locator('input[type="email"]'));
+      .or(this.page.getByRole('textbox', { name: /email/i }))
+      .or(this.page.locator('input[type="email"], input[name*="email" i], input[id*="email" i]'));
   }
 
   private get passwordTextbox(): Locator {
     return this.page
       .getByLabel(/password/i)
       .or(this.page.getByPlaceholder(/password/i))
-      .or(this.page.locator('input[type="password"]'));
+      .or(this.page.getByRole('textbox', { name: /password/i }))
+      .or(this.page.locator('input[type="password"], input[name*="password" i], input[id*="password" i]'));
   }
 
   private get nameTextbox(): Locator {
     return this.page
-      .getByLabel(/name/i)
-      .or(this.page.getByPlaceholder(/name/i))
-      .or(this.page.getByRole('textbox', { name: /name/i }));
+      .getByLabel(/^name$/i)
+      .or(this.page.getByPlaceholder(/^name$/i))
+      .or(this.page.getByRole('textbox', { name: /^name$/i }));
   }
 
   private get submitButton(): Locator {
@@ -29,10 +31,18 @@ class SignupPage {
   }
 
   private get duplicateEmailError(): Locator {
-    // Common duplicate-email messages across apps.
     return this.page.getByText(
       /email (is )?already (registered|in use|taken)|already have an account|duplicate email/i,
     );
+  }
+
+  private get homeAuthenticatedMarker(): Locator {
+    // Common authenticated markers.
+    return this.page
+      .getByRole('button', { name: /log out|logout|sign out/i })
+      .or(this.page.getByRole('link', { name: /log out|logout|sign out/i }))
+      .or(this.page.getByRole('button', { name: /account|profile|user|menu/i }))
+      .or(this.page.locator('[data-testid*="avatar" i], [aria-label*="account" i], [aria-label*="profile" i]'));
   }
 
   async goto(): Promise<void> {
@@ -40,31 +50,39 @@ class SignupPage {
     test.skip(!baseUrl, 'Missing BASE_URL environment variable for UI tests.');
 
     const root = baseUrl.replace(/\/$/, '');
-    await this.page.goto(`${root}/signup`);
 
-    // Some apps use /register instead of /signup.
-    if (await this.emailTextbox.count().catch(() => 0)) return;
-    await this.page.goto(`${root}/register`);
+    // Ensure precondition: no user is authenticated.
+    await this.page.context().clearCookies();
+
+    const candidates = [`${root}/signup`, `${root}/register`, `${root}/auth/signup`, `${root}/auth/register`];
+
+    for (const url of candidates) {
+      await this.page.goto(url, { waitUntil: 'domcontentloaded' });
+      // Wait a moment for client-side rendering.
+      await this.page.waitForLoadState('networkidle').catch(() => undefined);
+      if (await this.emailTextbox.first().isVisible().catch(() => false)) return;
+    }
+
+    // If we couldn't find the form, fail with a helpful assertion.
+    await expect(this.page.getByRole('heading', { name: /sign up|signup|register|create account/i })).toBeVisible();
   }
 
   async assertOnSignupPage(): Promise<void> {
-    await expect(this.emailTextbox).toBeVisible();
-    await expect(this.passwordTextbox).toBeVisible();
+    await expect(this.emailTextbox.first()).toBeVisible();
+    await expect(this.passwordTextbox.first()).toBeVisible();
     await expect(this.submitButton).toBeVisible();
   }
 
   async fillEmail(email: string): Promise<void> {
-    await expect(this.emailTextbox).toBeVisible();
-    await this.emailTextbox.fill(email);
+    await this.emailTextbox.first().fill(email);
   }
 
   async fillPassword(password: string): Promise<void> {
-    await expect(this.passwordTextbox).toBeVisible();
-    await this.passwordTextbox.fill(password);
+    await this.passwordTextbox.first().fill(password);
   }
 
   async fillNameIfPresent(name: string): Promise<void> {
-    if (await this.nameTextbox.count()) {
+    if ((await this.nameTextbox.count().catch(() => 0)) > 0) {
       await this.nameTextbox.fill(name);
     }
   }
@@ -83,6 +101,8 @@ class SignupPage {
   }
 
   async assertUnauthenticated(): Promise<void> {
+    await expect(this.homeAuthenticatedMarker).toHaveCount(0);
+
     // Generic unauthenticated assertion: signup/login CTA should still be visible.
     const authCta = this.page.getByRole('link', { name: /log in|login|sign in|sign up|signup/i });
     await expect(authCta.first()).toBeVisible();
