@@ -62,6 +62,15 @@ class SignupPage {
 
     const candidates = [`${root}/signup`, `${root}/register`, `${root}/auth/signup`, `${root}/auth/register`];
 
+    const emailOrUsername = this.page
+      .getByLabel(/email|e-mail|username|user name/i)
+      .or(this.page.getByPlaceholder(/email|e-mail|username|user name/i))
+      .or(
+        this.page.locator(
+          'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name="username"], input[id="username"], input[name*="user" i], input[id*="user" i]',
+        ),
+      );
+
     for (const url of candidates) {
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
 
@@ -73,30 +82,13 @@ class SignupPage {
         await openSignupCta.first().click().catch(() => undefined);
       }
 
-      // Wait for any plausible signup identifier (email OR username) to appear.
-      const emailOrUsername = this.page
-        .getByLabel(/email|e-mail|username|user name/i)
-        .or(this.page.getByPlaceholder(/email|e-mail|username|user name/i))
-        .or(this.page.locator(
-          'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name="username"], input[id="username"], input[name*="user" i], input[id*="user" i]',
-        ));
-
-      await emailOrUsername.first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => undefined);
-
-      // If the app uses username instead of email, proceed with that field.
+      if (await emailOrUsername.first().isVisible().catch(() => false)) return;
+      await emailOrUsername.first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
       if (await emailOrUsername.first().isVisible().catch(() => false)) return;
     }
 
-    // Final fallback: ensure at least one identifier field is present.
-    await expect(
-      this.page
-        .getByLabel(/email|e-mail|username|user name/i)
-        .or(this.page.getByPlaceholder(/email|e-mail|username|user name/i))
-        .or(this.page.locator(
-          'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name="username"], input[id="username"], input[name*="user" i], input[id*="user" i]',
-        ))
-        .first(),
-    ).toBeVisible({ timeout: 15000 });
+    // Final deterministic assertion (no swallowed errors).
+    await expect(emailOrUsername.first()).toBeVisible({ timeout: 15000 });
   }
 
   async assertOnSignupPage(): Promise<void> {
@@ -149,7 +141,6 @@ test.describe('AT-TC-28 - Reject signup with an existing email and show duplicat
     // Act
     await signupPage.fillEmail('existing@example.com');
     await signupPage.fillNameIfPresent('Existing User');
-    // Use a non-secret placeholder password; this test asserts server-side duplicate email rejection.
     await signupPage.fillPassword('ValidPassword123!');
     await signupPage.submit();
 
