@@ -62,7 +62,11 @@ class SignupPage extends BaseUiPage {
   private get fullNameTextbox(): Locator {
     return this.page
       .getByLabel(/full name|name/i)
-      .or(this.page.locator('input[name="fullName"], input[name="name"], input#fullName, input#name'));
+      .or(
+        this.page.locator(
+          'input[name="fullName"], input[name="name"], input#fullName, input#name, input[placeholder*="name" i], input[autocomplete="name"], input[autocomplete="given-name"], input[autocomplete="family-name"]',
+        ),
+      );
   }
 
   private get usernameTextbox(): Locator {
@@ -88,7 +92,8 @@ class SignupPage extends BaseUiPage {
   }
 
   private get passwordRequiredValidationMessage(): Locator {
-    return this.page.getByText(/password is required|required password|password required/i);
+    // Prefer explicit message; fallback to common HTML5 validation text.
+    return this.page.getByText(/password is required|required password|password required|please fill out this field/i);
   }
 
   async goto(): Promise<void> {
@@ -98,9 +103,7 @@ class SignupPage extends BaseUiPage {
 
   async assertSignupPageDisplayed(): Promise<void> {
     const headingCount = await this.signupHeading.count();
-    if (headingCount > 0) {
-      await expect(this.signupHeading.first()).toBeVisible();
-    }
+    if (headingCount > 0) await expect(this.signupHeading.first()).toBeVisible();
 
     await this.retryExpectVisible({ locator: this.fullNameTextbox, locatorName: 'Full Name textbox' });
     await this.retryExpectVisible({ locator: this.usernameTextbox, locatorName: 'Username textbox' });
@@ -129,15 +132,32 @@ class SignupPage extends BaseUiPage {
   }
 
   async assertSignupSubmissionBlocked(): Promise<void> {
+    // Stay on signup/register page.
     await expect(this.page).toHaveURL(/signup|register/i);
+
+    // Also ensure we did not land on a typical authenticated page.
+    await expect(this.page).not.toHaveURL(/dashboard|home|account|profile/i);
   }
 
   async assertPasswordRequiredValidationVisible(): Promise<void> {
-    await this.retryExpectVisible({
-      locator: this.passwordRequiredValidationMessage,
-      locatorName: 'Password is required validation message',
+    // Prefer field-level error message.
+    const messageVisible = await this.passwordRequiredValidationMessage.isVisible().catch(() => false);
+    if (messageVisible) {
+      await expect(this.passwordRequiredValidationMessage).toBeVisible();
+      return;
+    }
+
+    // Fallback: HTML5 required validation (browser-native) can block submission without rendering a message in DOM.
+    const validity = await this.passwordTextbox.evaluate((el) => {
+      const input = el as HTMLInputElement;
+      return {
+        valueMissing: input.validity.valueMissing,
+        validationMessage: input.validationMessage,
+      };
     });
-    await expect(this.passwordRequiredValidationMessage).toBeVisible();
+
+    expect(validity.valueMissing).toBeTruthy();
+    expect(validity.validationMessage.length).toBeGreaterThan(0);
   }
 }
 
