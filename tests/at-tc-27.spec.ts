@@ -1,4 +1,4 @@
-import { test, expect, APIResponse, APIRequestContext } from '@playwright/test';
+import { test, expect, APIRequestContext, APIResponse } from '@playwright/test';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -21,6 +21,12 @@ function getApiBaseUrl(): string {
     );
   }
   return baseUrl.replace(/\/$/, '');
+}
+
+function normalizePath(path: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) return '/health';
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 }
 
 async function parseJsonSafely<T>(response: APIResponse): Promise<T> {
@@ -130,19 +136,51 @@ class HealthApi {
   constructor(private readonly request: APIRequestContext, private readonly baseUrl: string) {}
 
   async getHealth(): Promise<{ response: APIResponse; body: JsonRecord; pathUsed: string }> {
-    const configuredPath = (process.env.HEALTH_PATH ?? '').trim();
-    if (!configuredPath) {
-      throw new Error(
-        'HEALTH_PATH env var is required for this environment. The default /health candidates returned HTML (likely UI/login page).',
-      );
+    const candidatePaths = [
+      normalizePath(process.env.HEALTH_PATH ?? '/health'),
+      '/health',
+      '/actuator/health',
+      '/api/health',
+      '/api/v1/health',
+    ];
+
+    let lastResponse: APIResponse | undefined;
+    let lastBodyText = '';
+
+    for (const path of candidatePaths) {
+      const url = `${this.baseUrl}${path}`;
+      const res = await this.request.get(url, {
+        headers: { Accept: 'application/json' },
+        failOnStatusCode: false,
+      });
+      lastResponse = res;
+
+      // Fast-path: if JSON, parse and return.
+      const contentType = res.headers()['content-type'] ?? '';
+      if (contentType.toLowerCase().includes('application/json')) {
+        const body = await parseJsonSafely<JsonRecord>(res);
+        return { response: res, body, pathUsed: path };
+      }
+
+      // If 404 or HTML, try next candidate.
+      lastBodyText = await res.text();
+      const looksLikeJson = /^[\s\r\n]*[\[{]/.test(lastBodyText);
+      if (looksLikeJson) {
+        const body = JSON.parse(lastBodyText) as JsonRecord;
+        return { response: res, body, pathUsed: path };
+      }
+
+      if (res.status() === 404) continue;
+      if (/<!doctype html>|<html[\s>]/i.test(lastBodyText)) continue;
     }
 
-    const path = configuredPath.startsWith('/') ? configuredPath : `/${configuredPath}`;
-    const url = `${this.baseUrl}${path}`;
-
-    const res = await this.request.get(url, { headers: { Accept: 'application/json' } });
-    const body = await parseJsonSafely<JsonRecord>(res);
-    return { response: res, body, pathUsed: path };
+    const status = lastResponse?.status();
+    const ct = lastResponse?.headers()['content-type'] ?? '';
+    throw new Error(
+      `Unable to retrieve JSON health payload from any known path. Tried: ${candidatePaths.join(
+        ', ',
+      )}. Last status: ${status}. Last content-type: ${ct}. Last body: ${lastBodyText}`,
+    );
   }
 
   extractAssertions(body: JsonRecord): HealthAssertions {
@@ -210,38 +248,32 @@ class HealthApi {
   }
 }
 
-test.describe(
-  'AT-TC-27 - API - Health check reports critical services UP with SLA latency and audit fields',
-  { tag: ['@functional', '@regression'] },
-  () => {
-    test('GET /health validates status, critical services, latency SLA, timestamp, and audit fields', async ({
-      request,
-    }) => {
-      // Arrange
-      const baseUrl = getApiBaseUrl();
-      const slaMs = Number(process.env.HEALTH_SLA_MS ?? '500');
-      if (!Number.isFinite(slaMs) || slaMs <= 0) {
-        throw new Error('Invalid HEALTH_SLA_MS. Provide a positive number (milliseconds).');
-      }
+test.describe('AT-TC-27 - API - Health check', { tag: ['@functional', '@regression'] }, () => {
+  test('GET /health reports critical services UP with SLA latency and audit fields', async ({ request }) => {
+    // Arrange
+    const baseUrl = getApiBaseUrl();
+    const slaMs = Number(process.env.HEALTH_SLA_MS ?? '500');
+    if (!Number.isFinite(slaMs) || slaMs <= 0) {
+      throw new Error('Invalid HEALTH_SLA_MS. Provide a positive number (milliseconds).');
+    }
 
-      const criticalServicesEnv = (process.env.HEALTH_CRITICAL_SERVICES ?? '').trim();
-      const criticalServices = criticalServicesEnv
-        ? criticalServicesEnv
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : [];
+    const criticalServicesEnv = (process.env.HEALTH_CRITICAL_SERVICES ?? '').trim();
+    const criticalServices = criticalServicesEnv
+      ? criticalServicesEnv
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
-      const healthApi = new HealthApi(request, baseUrl);
+    const healthApi = new HealthApi(request, baseUrl);
 
-      // Act
-      const { response, body, pathUsed } = await healthApi.getHealth();
+    // Act
+    const { response, body, pathUsed } = await healthApi.getHealth();
 
-      // Assert
-      expect(response.status(), `HTTP 200 OK is returned from ${pathUsed}`).toBe(200);
+    // Assert
+    expect(response.status(), `HTTP 200 OK is returned from ${pathUsed}`).toBe(200);
 
-      const extracted = healthApi.extractAssertions(body);
-      healthApi.assertHealth(extracted, { slaMs, criticalServices });
-    });
-  },
-);
+    const extracted = healthApi.extractAssertions(body);
+    healthApi.assertHealth(extracted, { slaMs, criticalServices });
+  });
+});
