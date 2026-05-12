@@ -27,23 +27,24 @@ async function parseJsonSafely<T>(response: APIResponse): Promise<T> {
 }
 
 test.describe('AT-TC-3 - API - Fetch details for an existing power bank by ID', { tag: ['@api'] }, () => {
-  test('GET /powerbanks/PB123 returns 200 with id=PB123 and non-empty name', async ({ request }) => {
+  test('GET /powerbanks/{id} returns 200 with id=PB123 and non-empty name', async ({ request }) => {
     // Arrange
     const baseUrl = getApiBaseUrl();
     const powerBankId = 'PB123';
 
     // Act
-    const url = new URL(baseUrl);
-    url.pathname = `${url.pathname.replace(/\/$/, '')}/powerbanks/${powerBankId}`.replace(/\/\//g, '/');
-
-    const response = await request.get(url.toString());
+    const response = await request.get(`/powerbanks/${powerBankId}`, {
+      // Ensure we use the configured baseURL from Playwright config (if present)
+      // and avoid double-prefixing when API_BASE_URL/BASE_URL points to a UI host.
+      baseURL: baseUrl,
+    });
 
     // Assert
     expect(response.status(), 'Response status is 200').toBe(200);
 
     const body = await parseJsonSafely<PowerBankResponseBody>(response);
-    expect(body.id, "Response body contains 'id' equal to 'PB123'").toBe(powerBankId);
-    expect(body.name, "Response body includes 'name' field").toBeTruthy();
+    expect(body.id, "Response body id is 'PB123'").toBe(powerBankId);
+    expect(body.name, "Response body contains non-empty 'name' field").toBeTruthy();
     expect(String(body.name).trim(), "Response body contains non-empty 'name' field").not.toHaveLength(0);
   });
 });
