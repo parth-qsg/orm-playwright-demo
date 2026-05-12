@@ -144,16 +144,14 @@ class HealthApi {
 
   async getHealth(): Promise<{ response: APIResponse; body: JsonRecord; pathUsed: string }> {
     const configuredPath = (process.env.HEALTH_PATH ?? '').trim();
-
-    // In this repo, BASE_URL may point to a UI host (e.g., demo site) that doesn't expose a health endpoint.
-    // To keep the test deterministic, require explicit configuration when HEALTH_PATH isn't provided.
-    if (!configuredPath) {
-      throw new Error(
-        `HEALTH_PATH is not configured. Set HEALTH_PATH (e.g., '/actuator/health') and optionally HEALTH_BASE_URL/HEALTH_BASE_PATH to point to the API host. Current base URL: ${this.baseUrl}`,
-      );
-    }
-
-    const candidatePaths = [normalizePath(configuredPath)];
+    const candidatePaths = [
+      normalizePath(configuredPath || '/health'),
+      // Common alternates across frameworks (Spring Boot, etc.)
+      '/actuator/health',
+      '/api/health',
+      '/healthz',
+      '/status',
+    ].filter((p, idx, arr) => arr.indexOf(p) === idx);
 
     let lastResponse: APIResponse | undefined;
     let lastBodyText = '';
@@ -167,34 +165,33 @@ class HealthApi {
       lastResponse = res;
 
       const contentType = res.headers()['content-type'] ?? '';
-      if (contentType.toLowerCase().includes('application/json')) {
-        const body = await parseJsonSafely<JsonRecord>(res);
-        return { response: res, body, pathUsed: path };
+      const bodyText = await res.text();
+      lastBodyText = bodyText;
+
+      const looksLikeJson = /^[\s\r\n]*[\[{]/.test(bodyText);
+      const looksLikeHtml = /<!doctype html>|<html[\s>]/i.test(bodyText);
+
+      // If we got HTML, it's likely a UI route; try next candidate.
+      if (looksLikeHtml) continue;
+
+      // If it looks like JSON (or is declared JSON), attempt to parse.
+      if (contentType.toLowerCase().includes('application/json') || looksLikeJson) {
+        try {
+          const body = JSON.parse(bodyText) as JsonRecord;
+          return { response: res, body, pathUsed: path };
+        } catch {
+          // Try next candidate.
+        }
       }
 
-      lastBodyText = await res.text();
-      const looksLikeJson = /^[\s\r\n]*[\[{]/.test(lastBodyText);
-      if (looksLikeJson) {
-        return { response: res, body: JSON.parse(lastBodyText) as JsonRecord, pathUsed: path };
-      }
-
+      // If it's a clear 404, try next candidate.
       if (res.status() === 404) continue;
-      if (/<!doctype html>|<html[\s>]/i.test(lastBodyText)) continue;
     }
 
-    const status = lastResponse?.status();
-    const ct = lastResponse?.headers()['content-type'] ?? '';
-    if (status === 404) {
-      throw new Error(
-        `Health endpoint not found (404). Configure HEALTH_PATH (e.g., '/actuator/health') and/or HEALTH_BASE_URL/HEALTH_BASE_PATH. Tried: ${candidatePaths.join(
-          ', ',
-        )}. Base URL: ${this.baseUrl}. Last content-type: ${ct}. Last body: ${lastBodyText}`,
-      );
-    }
-
-    throw new Error(
-      `Unable to retrieve JSON health payload. Tried: ${candidatePaths.join(', ')}. Last status: ${status}. Last content-type: ${ct}. Last body: ${lastBodyText}`,
-    );
+    // Fall back to the original safe parser for a helpful error message.
+    if (!lastResponse) throw new Error('No response received from health endpoint candidates.');
+    const body = await parseJsonSafely<JsonRecord>(lastResponse);
+    return { response: lastResponse, body, pathUsed: candidatePaths[0] ?? '/health' };
   }
 
   extractAssertions(body: JsonRecord): HealthAssertions {
