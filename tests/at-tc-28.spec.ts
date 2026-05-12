@@ -37,12 +37,15 @@ class SignupPage {
   }
 
   private get homeAuthenticatedMarker(): Locator {
-    // Common authenticated markers.
     return this.page
       .getByRole('button', { name: /log out|logout|sign out/i })
       .or(this.page.getByRole('link', { name: /log out|logout|sign out/i }))
       .or(this.page.getByRole('button', { name: /account|profile|user|menu/i }))
       .or(this.page.locator('[data-testid*="avatar" i], [aria-label*="account" i], [aria-label*="profile" i]'));
+  }
+
+  private get authCta(): Locator {
+    return this.page.getByRole('link', { name: /log in|login|sign in|sign up|signup/i });
   }
 
   async goto(): Promise<void> {
@@ -51,20 +54,24 @@ class SignupPage {
 
     const root = baseUrl.replace(/\/$/, '');
 
-    // Ensure precondition: no user is authenticated.
+    // Preconditions: no user is currently authenticated.
     await this.page.context().clearCookies();
 
     const candidates = [`${root}/signup`, `${root}/register`, `${root}/auth/signup`, `${root}/auth/register`];
 
     for (const url of candidates) {
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
-      // Wait a moment for client-side rendering.
       await this.page.waitForLoadState('networkidle').catch(() => undefined);
-      if (await this.emailTextbox.first().isVisible().catch(() => false)) return;
+
+      // Consider the page a valid signup page if we can interact with the email field
+      // or if a signup form is present (some apps don't render a heading).
+      const emailVisible = await this.emailTextbox.first().isVisible().catch(() => false);
+      const formVisible = await this.page.locator('form').first().isVisible().catch(() => false);
+      if (emailVisible || formVisible) return;
     }
 
-    // If we couldn't find the form, fail with a helpful assertion.
-    await expect(this.page.getByRole('heading', { name: /sign up|signup|register|create account/i })).toBeVisible();
+    // Fallback assertion: at least a signup form/email field should exist.
+    await expect(this.emailTextbox.first()).toBeVisible();
   }
 
   async assertOnSignupPage(): Promise<void> {
@@ -102,10 +109,7 @@ class SignupPage {
 
   async assertUnauthenticated(): Promise<void> {
     await expect(this.homeAuthenticatedMarker).toHaveCount(0);
-
-    // Generic unauthenticated assertion: signup/login CTA should still be visible.
-    const authCta = this.page.getByRole('link', { name: /log in|login|sign in|sign up|signup/i });
-    await expect(authCta.first()).toBeVisible();
+    await expect(this.authCta.first()).toBeVisible();
   }
 }
 

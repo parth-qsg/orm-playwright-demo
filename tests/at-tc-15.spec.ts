@@ -22,24 +22,31 @@ class BaseUiPage {
 }
 
 class SignupPage extends BaseUiPage {
-  private get heading(): Locator {
-    return this.page.getByRole('heading', { name: /sign up|signup|create account|register/i });
-  }
-
   private get fullNameInput(): Locator {
-    return this.page.getByRole('textbox', { name: /full name/i });
+    return this.page
+      .getByLabel(/full name/i)
+      .or(this.page.getByPlaceholder(/full name/i))
+      .or(this.page.getByRole('textbox', { name: /full name/i }))
+      .or(this.page.locator('input[name="fullName"], input[name="fullname"], input[id*="full" i]'));
   }
 
   private get usernameInput(): Locator {
-    return this.page.getByRole('textbox', { name: /username/i });
+    return this.page
+      .getByLabel(/username/i)
+      .or(this.page.getByPlaceholder(/username/i))
+      .or(this.page.getByRole('textbox', { name: /username/i }))
+      .or(this.page.locator('input[name="username"], input[id*="user" i]'));
   }
 
   private get emailInput(): Locator {
-    return this.page.getByRole('textbox', { name: /email/i });
+    return this.page
+      .getByLabel(/email/i)
+      .or(this.page.getByPlaceholder(/email/i))
+      .or(this.page.getByRole('textbox', { name: /email/i }))
+      .or(this.page.locator('input[type="email"], input[name="email"], input[id*="email" i]'));
   }
 
   private get passwordInput(): Locator {
-    // Prefer label-based password field; fall back to common placeholder/name patterns.
     return this.page
       .getByLabel(/password/i)
       .or(this.page.getByRole('textbox', { name: /password/i }))
@@ -47,7 +54,11 @@ class SignupPage extends BaseUiPage {
   }
 
   private get referralCodeInput(): Locator {
-    return this.page.getByRole('textbox', { name: /referral code|referral/i });
+    return this.page
+      .getByLabel(/referral code|referral/i)
+      .or(this.page.getByPlaceholder(/referral/i))
+      .or(this.page.getByRole('textbox', { name: /referral code|referral/i }))
+      .or(this.page.locator('input[name*="ref" i], input[id*="ref" i]'));
   }
 
   private get signUpButton(): Locator {
@@ -59,9 +70,10 @@ class SignupPage extends BaseUiPage {
   }
 
   async assertOnSignupPage(): Promise<void> {
-    // Some apps render signup without a heading or with non-semantic markup.
-    // Assert using stable form controls instead of a heading.
     await expect(this.page).toHaveURL(/signup|register/i);
+
+    // Wait for the form to render (some apps lazy-load fields)
+    await expect(this.signUpButton).toBeVisible();
 
     await this.expectVisible(this.fullNameInput, 'Full name input');
     await this.expectVisible(this.usernameInput, 'Username input');
@@ -113,7 +125,6 @@ class HomePage extends BaseUiPage {
   }
 
   async assertAuthenticated(): Promise<void> {
-    // Strongest common indicator.
     await this.expectVisible(this.logoutButton, 'Logout/Sign out button');
   }
 
@@ -127,9 +138,10 @@ class AccountPage extends BaseUiPage {
   async assertReferralAssociationPersisted(referralCode: string): Promise<void> {
     await expect(this.page).toHaveURL(/account|profile|settings/i);
 
-    // Verify referral label exists and the code is displayed somewhere in the account area.
     await this.expectVisible(this.page.getByText(/referral code|referral/i), 'Referral label');
-    await expect(this.page.getByText(new RegExp(referralCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'))).toBeVisible();
+
+    const escaped = referralCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    await expect(this.page.getByText(new RegExp(escaped, 'i'))).toBeVisible();
   }
 }
 
