@@ -131,54 +131,18 @@ class HealthApi {
 
   async getHealth(): Promise<{ response: APIResponse; body: JsonRecord; pathUsed: string }> {
     const configuredPath = (process.env.HEALTH_PATH ?? '').trim();
-    const healthPaths = (
-      configuredPath
-        ? [configuredPath]
-        : [
-            '/health',
-            '/actuator/health',
-            '/api/health',
-            '/api/actuator/health',
-            '/api/v1/health',
-            '/api/v1/actuator/health',
-            '/status/health',
-            '/healthz',
-            '/readyz',
-            '/livez',
-          ]
-    ).map((p) => (p.startsWith('/') ? p : `/${p}`));
-
-    // Some deployments expose health at the base URL itself (e.g., API_BASE_URL already includes /health).
-    // If baseUrl returns 404, we still try common health paths.
-    const candidateUrls: Array<{ url: string; pathUsed: string }> = [
-      ...healthPaths.map((p) => ({ url: `${this.baseUrl}${p}`, pathUsed: p })),
-      { url: this.baseUrl, pathUsed: '(baseUrl)' },
-    ];
-
-    let lastResponse: APIResponse | undefined;
-    for (const candidate of candidateUrls) {
-      const res = await this.request.get(candidate.url, {
-        headers: {
-          Accept: 'application/json',
-        },
-      });
-      lastResponse = res;
-      if (res.status() === 404) continue;
-
-      try {
-        const body = await parseJsonSafely<JsonRecord>(res);
-        return { response: res, body, pathUsed: candidate.pathUsed };
-      } catch {
-        continue;
-      }
+    if (!configuredPath) {
+      throw new Error(
+        'HEALTH_PATH env var is required for this environment. The default /health candidates returned HTML (likely UI/login page).',
+      );
     }
 
-    const bodyText = lastResponse ? await lastResponse.text() : '';
-    throw new Error(
-      `Health endpoint not found. Set HEALTH_PATH env var to the correct endpoint. Tried baseUrl and: ${healthPaths.join(
-        ', ',
-      )}. Last status: ${lastResponse?.status()}. Body: ${bodyText}`,
-    );
+    const path = configuredPath.startsWith('/') ? configuredPath : `/${configuredPath}`;
+    const url = `${this.baseUrl}${path}`;
+
+    const res = await this.request.get(url, { headers: { Accept: 'application/json' } });
+    const body = await parseJsonSafely<JsonRecord>(res);
+    return { response: res, body, pathUsed: path };
   }
 
   extractAssertions(body: JsonRecord): HealthAssertions {
