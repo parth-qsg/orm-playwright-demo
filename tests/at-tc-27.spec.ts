@@ -122,13 +122,13 @@ class HealthApi {
 
     const candidatePaths = [
       normalizePath(configuredPath || ''),
-      '/actuator/health',
-      '/actuator/health/liveness',
-      '/actuator/health/readiness',
       '/health',
       '/api/health',
       '/healthz',
       '/status',
+      '/actuator/health',
+      '/actuator/health/liveness',
+      '/actuator/health/readiness',
     ]
       .filter(Boolean)
       .filter((p, idx, arr) => arr.indexOf(p) === idx);
@@ -173,7 +173,6 @@ class HealthApi {
         `Tried: ${candidatePaths.join(', ')}. Last status: ${lastResponse.status()}. content-type: ${ct}. Body: ${lastBodyText}`,
     );
 
-    // Unreachable, but keeps TS happy.
     throw new Error('Skipped');
   }
 
