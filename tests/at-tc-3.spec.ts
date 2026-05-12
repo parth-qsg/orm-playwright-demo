@@ -1,63 +1,49 @@
 import { test, expect, APIResponse } from '@playwright/test';
 
-interface ApiEnv {
-  baseURL: string;
+interface PowerBankResponseBody {
+  id: string;
+  name?: string;
 }
 
-interface PowerBankDetails {
-  id?: unknown;
-  name?: unknown;
-  [key: string]: unknown;
-}
-
-function getApiEnv(): ApiEnv {
-  const baseURL = process.env.API_BASE_URL ?? process.env.BASE_URL;
-
-  if (!baseURL) {
+function getApiBaseUrl(): string {
+  const baseUrl = process.env.API_BASE_URL ?? process.env.BASE_URL;
+  if (!baseUrl) {
     throw new Error(
-      'Missing API base URL. Set API_BASE_URL (preferred) or BASE_URL environment variable.',
+      'Missing API base URL. Set API_BASE_URL (preferred) or BASE_URL environment variables.',
     );
   }
-
-  return { baseURL };
+  return baseUrl.replace(/\/$/, '');
 }
 
-async function parseJsonObjectResponse(response: APIResponse): Promise<Record<string, unknown>> {
-  const json = (await response.json()) as unknown;
-  expect(json).toBeTruthy();
-  expect(typeof json).toBe('object');
-  expect(Array.isArray(json)).toBeFalsy();
-  return json as Record<string, unknown>;
+async function parseJsonSafely<T>(response: APIResponse): Promise<T> {
+  const contentType = response.headers()['content-type'] ?? '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    const bodyText = await response.text();
+    throw new Error(
+      `Expected JSON response but got content-type: ${contentType}. Body: ${bodyText}`,
+    );
+  }
+  return (await response.json()) as T;
 }
 
-test.describe('AT-TC-3 - Fetch details for an existing power bank by ID', { tag: ['@api', '@high'] }, () => {
-  test("AT-TC-3 - GET /powerbanks/PB123 returns 200 with id 'PB123' and non-empty name", async ({ request }) => {
+test.describe('AT-TC-3 - API - Fetch details for an existing power bank by ID', { tag: ['@api'] }, () => {
+  test('GET /powerbanks/PB123 returns 200 with id=PB123 and non-empty name', async ({ request }) => {
     // Arrange
-    const baseURL = process.env.API_BASE_URL ?? process.env.BASE_URL;
-    test.skip(!baseURL, 'Missing API_BASE_URL (preferred) or BASE_URL environment variable.');
-
-    const { baseURL: resolvedBaseURL } = getApiEnv();
-    const endpointPath = '/powerbanks/PB123';
+    const baseUrl = getApiBaseUrl();
+    const powerBankId = 'PB123';
 
     // Act
-    const response = await request.get(`${resolvedBaseURL.replace(/\/$/, '')}${endpointPath}`);
+    const url = new URL(baseUrl);
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/powerbanks/${powerBankId}`.replace(/\/\//g, '/');
+
+    const response = await request.get(url.toString());
 
     // Assert
-    test.skip(
-      response.status() === 404,
-      `Endpoint not found: GET ${resolvedBaseURL.replace(/\/$/, '')}${endpointPath}. ` +
-        'Set API_BASE_URL to the correct API host that serves /powerbanks/{id}.',
-    );
+    expect(response.status(), 'Response status is 200').toBe(200);
 
-    await expect(response).toBeOK();
-    expect(response.status()).toBe(200);
-
-    const body = (await parseJsonObjectResponse(response)) as PowerBankDetails;
-
-    expect(body.id).toBe('PB123');
-
-    expect(body.name).toBeTruthy();
-    expect(typeof body.name).toBe('string');
-    expect((body.name as string).trim().length).toBeGreaterThan(0);
+    const body = await parseJsonSafely<PowerBankResponseBody>(response);
+    expect(body.id, "Response body contains 'id' equal to 'PB123'").toBe(powerBankId);
+    expect(body.name, "Response body includes 'name' field").toBeTruthy();
+    expect(String(body.name).trim(), "Response body contains non-empty 'name' field").not.toHaveLength(0);
   });
 });
