@@ -16,9 +16,7 @@ type HealthAssertions = {
 function getApiBaseUrl(): string {
   const baseUrl = process.env.API_BASE_URL ?? process.env.BASE_URL;
   if (!baseUrl) {
-    throw new Error(
-      'Missing API base URL. Set API_BASE_URL (preferred) or BASE_URL environment variables.',
-    );
+    throw new Error('Missing API base URL. Set API_BASE_URL (preferred) or BASE_URL.');
   }
   return baseUrl.replace(/\/$/, '');
 }
@@ -48,9 +46,7 @@ async function parseJsonSafely<T>(response: APIResponse): Promise<T> {
   const looksLikeHtml = /<!doctype html>|<html[\s>]/i.test(bodyText);
 
   if (!contentType.toLowerCase().includes('application/json') && !looksLikeJson) {
-    throw new Error(
-      `Expected JSON response but got content-type: ${contentType}. Body: ${bodyText}`,
-    );
+    throw new Error(`Expected JSON response but got content-type: ${contentType}. Body: ${bodyText}`);
   }
   if (looksLikeHtml) {
     throw new Error(
@@ -69,8 +65,7 @@ async function parseJsonSafely<T>(response: APIResponse): Promise<T> {
 
 function isValidDateTime(value: unknown): boolean {
   if (typeof value !== 'string' || value.trim().length === 0) return false;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms);
+  return Number.isFinite(Date.parse(value));
 }
 
 function findFirstKey(obj: JsonRecord, keys: string[]): string | undefined {
@@ -108,8 +103,8 @@ function collectServiceStatuses(body: JsonRecord): ServiceStatus[] {
   const componentsKey = findFirstKey(body, ['components']);
   const servicesKey = findFirstKey(body, ['services', 'dependencies']);
 
-  const container = (componentsKey ? body[componentsKey] : undefined) ??
-    (servicesKey ? body[servicesKey] : undefined);
+  const container =
+    (componentsKey ? body[componentsKey] : undefined) ?? (servicesKey ? body[servicesKey] : undefined);
 
   if (container && typeof container === 'object' && !Array.isArray(container)) {
     for (const [name, value] of Object.entries(container as JsonRecord)) {
@@ -144,7 +139,10 @@ function collectServiceStatuses(body: JsonRecord): ServiceStatus[] {
 }
 
 class HealthApi {
-  constructor(private readonly request: APIRequestContext, private readonly baseUrl: string) {}
+  constructor(
+    private readonly request: APIRequestContext,
+    private readonly baseUrl: string,
+  ) {}
 
   async getHealth(): Promise<{ response: APIResponse; body: JsonRecord; pathUsed: string }> {
     const candidatePaths = [
@@ -175,16 +173,25 @@ class HealthApi {
       lastBodyText = await res.text();
       const looksLikeJson = /^[\s\r\n]*[\[{]/.test(lastBodyText);
       if (looksLikeJson) {
-        const body = JSON.parse(lastBodyText) as JsonRecord;
-        return { response: res, body, pathUsed: path };
+        return { response: res, body: JSON.parse(lastBodyText) as JsonRecord, pathUsed: path };
       }
 
       if (res.status() === 404) continue;
       if (/<!doctype html>|<html[\s>]/i.test(lastBodyText)) continue;
     }
 
+    // Patch for environments where the health endpoint is not exposed at the default paths.
+    // In that case, fail with a clear configuration error instead of a generic 404/HTML parse error.
     const status = lastResponse?.status();
     const ct = lastResponse?.headers()['content-type'] ?? '';
+    if (status === 404) {
+      throw new Error(
+        `Health endpoint not found (404) at any known path. Configure HEALTH_PATH (e.g., '/actuator/health') and/or HEALTH_BASE_URL/HEALTH_BASE_PATH. Tried: ${candidatePaths.join(
+          ', ',
+        )}. Base URL: ${this.baseUrl}. Last content-type: ${ct}. Last body: ${lastBodyText}`,
+      );
+    }
+
     throw new Error(
       `Unable to retrieve JSON health payload from any known path. Tried: ${candidatePaths.join(
         ', ',
@@ -222,37 +229,24 @@ class HealthApi {
         expect(match?.status, `Critical service '${svc}' status is 'UP'`).toBe('UP');
       }
     } else {
-      expect(
-        extracted.services.length,
-        'Health payload exposes at least one service/component status',
-      ).toBeGreaterThan(0);
+      expect(extracted.services.length, 'Health payload exposes at least one service status').toBeGreaterThan(0);
       for (const svc of extracted.services) {
         expect(svc.status, `Service '${svc.name}' status is 'UP'`).toBe('UP');
       }
     }
 
-    expect(
-      extracted.latencyMs,
-      "Health payload includes a numeric latency field (e.g., 'latencyMs')",
-    ).toBeDefined();
-    expect(
-      extracted.latencyMs as number,
-      `Reported latency is <= SLA (${opts.slaMs}ms)`,
-    ).toBeLessThanOrEqual(opts.slaMs);
+    expect(extracted.latencyMs, "Health payload includes a numeric latency field (e.g., 'latencyMs')").toBeDefined();
+    expect(extracted.latencyMs as number, `Reported latency is <= SLA (${opts.slaMs}ms)`).toBeLessThanOrEqual(
+      opts.slaMs,
+    );
 
     expect(extracted.timestamp, "Health payload includes a timestamp field (e.g., 'timestamp')").toBeTruthy();
     expect(isValidDateTime(extracted.timestamp), 'Timestamp is a valid date-time string').toBe(true);
 
-    expect(
-      extracted.reportSource,
-      "Health payload includes auditable field 'reportSource' (or equivalent)",
-    ).toBeTruthy();
+    expect(extracted.reportSource, "Health payload includes auditable field 'reportSource' (or equivalent)").toBeTruthy();
     expect(extracted.reportSource?.trim().length, "'reportSource' is non-empty").toBeGreaterThan(0);
 
-    expect(
-      extracted.reportedBy,
-      "Health payload includes auditable field 'reportedBy' (or equivalent)",
-    ).toBeTruthy();
+    expect(extracted.reportedBy, "Health payload includes auditable field 'reportedBy' (or equivalent)").toBeTruthy();
     expect(extracted.reportedBy?.trim().length, "'reportedBy' is non-empty").toBeGreaterThan(0);
   }
 }
@@ -262,6 +256,7 @@ test.describe('AT-TC-27 - API - Health check', { tag: ['@functional', '@regressi
     // Arrange
     const apiBaseUrl = getApiBaseUrl();
     const baseUrl = getHealthBaseUrl(apiBaseUrl);
+
     const slaMs = Number(process.env.HEALTH_SLA_MS ?? '500');
     if (!Number.isFinite(slaMs) || slaMs <= 0) {
       throw new Error('Invalid HEALTH_SLA_MS. Provide a positive number (milliseconds).');
