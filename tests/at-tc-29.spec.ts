@@ -42,58 +42,54 @@ class AuthenticatedApp {
 
     const root = baseUrl.replace(/\/$/, '');
 
-    await this.page.goto(`${root}/`, { waitUntil: 'domcontentloaded' });
-    if (await this.isAuthenticated().catch(() => false)) return;
-
+    // Try common login routes first (some apps don't expose login fields on the home page).
     const loginPaths = ['/login', '/signin', '/sign-in', '/auth/login'];
+    for (const p of ['/', ...loginPaths]) {
+      await this.page.goto(`${root}${p === '/' ? '/' : p}`, { waitUntil: 'domcontentloaded' });
+      if (await this.isAuthenticated().catch(() => false)) return;
 
-    // If the app exposes a login entry point on the home page, use it first.
-    if ((await this.loginCta.count().catch(() => 0)) > 0) {
-      await this.loginCta.first().click();
-      await this.page.waitForLoadState('domcontentloaded');
+      // If a login CTA exists, use it to reach the form.
+      if ((await this.loginCta.count().catch(() => 0)) > 0) {
+        await this.loginCta.first().click();
+        await this.page.waitForLoadState('domcontentloaded');
+      }
+
+      const identifierField = this.page
+        .getByLabel(/email|e-mail|username|user name|identifier|user id|login|email or username/i)
+        .or(this.page.getByPlaceholder(/email|e-mail|username|email or username|username or email|login/i))
+        .or(
+          this.page.locator(
+            'input[type="email"], input[type="text"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i], input[name*="login" i], input[id*="login" i]',
+          ),
+        );
+
+      const passwordField = this.page
+        .getByLabel(/password/i)
+        .or(this.page.getByPlaceholder(/password/i))
+        .or(this.page.locator('input[type="password"], input[autocomplete="current-password"]'));
+
+      if ((await identifierField.count().catch(() => 0)) === 0 || (await passwordField.count().catch(() => 0)) === 0) {
+        continue;
+      }
+
+      await expect(identifierField.first()).toBeVisible({ timeout: 15000 });
+      await identifierField.first().fill(username);
+
+      await expect(passwordField.first()).toBeVisible({ timeout: 15000 });
+      await passwordField.first().fill(password);
+
+      const submit = this.page
+        .getByRole('button', { name: /log in|login|sign in|continue/i })
+        .or(this.page.getByRole('button', { name: /submit/i }));
+      await expect(submit.first()).toBeEnabled();
+      await submit.first().click();
+
+      await this.assertAuthenticated();
+      return;
     }
 
-    const usernameField = this.page
-      .getByLabel(/email|e-mail|username|user name/i)
-      .or(this.page.getByPlaceholder(/email|e-mail|username/i))
-      .or(
-        this.page.locator(
-          'input[type="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]',
-        ),
-      );
-
-    const passwordField = this.page
-      .getByLabel(/password/i)
-      .or(this.page.getByPlaceholder(/password/i))
-      .or(this.page.locator('input[type="password"], input[autocomplete="current-password"]'));
-
-    for (const p of loginPaths) {
-      if ((await usernameField.count().catch(() => 0)) > 0) break;
-      await this.page.goto(`${root}${p}`, { waitUntil: 'domcontentloaded' });
-      if ((await usernameField.count().catch(() => 0)) > 0) break;
-    }
-
-    // Some apps use a single identifier field ("Email or username") without an email-type input.
-    const identifierField = usernameField.or(
-      this.page
-        .getByLabel(/identifier|user id|login|email or username/i)
-        .or(this.page.getByPlaceholder(/email or username|username or email|login/i))
-        .or(this.page.locator('input[type="text"], input[autocomplete="on"], input[name*="login" i], input[id*="login" i]')),
-    );
-
-    await expect(identifierField.first()).toBeVisible({ timeout: 15000 });
-    await identifierField.first().fill(username);
-
-    await expect(passwordField.first()).toBeVisible({ timeout: 15000 });
-    await passwordField.first().fill(password);
-
-    const submit = this.page
-      .getByRole('button', { name: /log in|login|sign in|continue/i })
-      .or(this.page.getByRole('button', { name: /submit/i }));
-    await expect(submit.first()).toBeEnabled();
-    await submit.first().click();
-
-    await this.assertAuthenticated();
+    // If we got here, we couldn't find a login form.
+    await expect(this.page.locator('form')).toBeVisible({ timeout: 15000 });
   }
 
   async isAuthenticated(): Promise<boolean> {
@@ -151,7 +147,7 @@ class AuthenticatedApp {
 test.describe('AT-TC-29 - Verify user remains logged in after refreshing the page post-signup', {
   tag: ['@functional', '@secure'],
 }, () => {
-  test('AT-TC-29 - Session persists after refresh and navigation', async ({ page }) => {
+  test('AT-TC-29 - User remains authenticated after refresh and navigation', async ({ page }) => {
     const app = new AuthenticatedApp(page);
 
     // Arrange (precondition: user is authenticated after signup). We satisfy it via env-based authentication.
@@ -159,13 +155,13 @@ test.describe('AT-TC-29 - Verify user remains logged in after refreshing the pag
     await app.gotoHome();
     await app.assertAuthenticated();
 
-    // Act: refresh the page
+    // Act: refresh the browser page
     await app.refreshAndWaitForReady();
 
-    // Assert: user remains authenticated after refresh
+    // Assert: user is still authenticated
     await app.assertAuthenticated();
 
-    // Act + Assert: navigate elsewhere and confirm session persists
+    // Act + Assert: navigate to another page and confirm session persists
     await app.navigateToAnotherPageAndAssertSessionPersists();
   });
 });
