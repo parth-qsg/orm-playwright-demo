@@ -27,8 +27,6 @@ async function parseJsonSafely<T>(response: APIResponse): Promise<T> {
   const contentType = response.headers()['content-type'] ?? '';
   const bodyText = await response.text();
 
-  // Some apps return JSON with an incorrect/missing content-type.
-  // Also, if we accidentally hit the UI (HTML), fail with a clear error.
   const looksLikeJson = /^[\s\r\n]*[\[{]/.test(bodyText);
   const looksLikeHtml = /<!doctype html>|<html[\s>]/i.test(bodyText);
 
@@ -90,11 +88,6 @@ function getStringField(obj: JsonRecord, keys: string[]): string | undefined {
 function collectServiceStatuses(body: JsonRecord): ServiceStatus[] {
   const results: ServiceStatus[] = [];
 
-  // Common shapes:
-  // 1) Spring Boot actuator: { status: 'UP', components: { db: { status: 'UP' }, ... } }
-  // 2) Custom: { services: { db: { status: 'UP' } } } or { services: [{ name, status }] }
-  // 3) Flat: { db: 'UP', redis: 'UP' }
-
   const componentsKey = findFirstKey(body, ['components']);
   const servicesKey = findFirstKey(body, ['services', 'dependencies']);
 
@@ -121,7 +114,6 @@ function collectServiceStatuses(body: JsonRecord): ServiceStatus[] {
     }
   }
 
-  // Fallback: scan top-level keys for { status: 'UP' }
   if (results.length === 0) {
     for (const [name, value] of Object.entries(body)) {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -156,8 +148,6 @@ class HealthApi {
           ]
     ).map((p) => (p.startsWith('/') ? p : `/${p}`));
 
-    // Some deployments expose health at the base URL itself (e.g., API_BASE_URL already includes /health).
-    // Try baseUrl as-is first, then fall back to common paths.
     const candidateUrls: Array<{ url: string; pathUsed: string }> = [
       { url: this.baseUrl, pathUsed: '(baseUrl)' },
       ...healthPaths.map((p) => ({ url: `${this.baseUrl}${p}`, pathUsed: p })),
@@ -165,12 +155,22 @@ class HealthApi {
 
     let lastResponse: APIResponse | undefined;
     for (const candidate of candidateUrls) {
-      const res = await this.request.get(candidate.url);
+      const res = await this.request.get(candidate.url, {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
       lastResponse = res;
       if (res.status() === 404) continue;
 
-      const body = await parseJsonSafely<JsonRecord>(res);
-      return { response: res, body, pathUsed: candidate.pathUsed };
+      // Some apps return HTML (SPA/login) for unknown routes or when not authenticated.
+      // Treat non-JSON responses as a non-match and try the next candidate path.
+      try {
+        const body = await parseJsonSafely<JsonRecord>(res);
+        return { response: res, body, pathUsed: candidate.pathUsed };
+      } catch {
+        continue;
+      }
     }
 
     const bodyText = lastResponse ? await lastResponse.text() : '';
