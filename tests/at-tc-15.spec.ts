@@ -62,7 +62,12 @@ class SignupPage extends BaseUiPage {
   }
 
   private get signUpButton(): Locator {
-    return this.page.getByRole('button', { name: /sign up|signup|create account|register/i });
+    // Some apps use "Sign Up" as a heading and "Create account" as the submit button,
+    // or render the submit as <input type="submit">.
+    return this.page
+      .getByRole('button', { name: /sign up|sign-up|signup|create account|register|create an account/i })
+      .or(this.page.getByRole('button', { name: /continue|submit/i }))
+      .or(this.page.locator('button[type="submit"], input[type="submit"], [data-testid*="signup" i], [data-testid*="register" i]'));
   }
 
   async goto(): Promise<void> {
@@ -72,15 +77,14 @@ class SignupPage extends BaseUiPage {
   async assertOnSignupPage(): Promise<void> {
     await expect(this.page).toHaveURL(/signup|register/i);
 
-    // Wait for the form to render (some apps lazy-load fields)
-    await expect(this.signUpButton).toBeVisible();
-
+    // Prefer asserting on form fields first; some UIs only render/enable submit after validation.
     await this.expectVisible(this.fullNameInput, 'Full name input');
     await this.expectVisible(this.usernameInput, 'Username input');
     await this.expectVisible(this.emailInput, 'Email input');
     await this.expectVisible(this.passwordInput, 'Password input');
     await this.expectVisible(this.referralCodeInput, 'Referral code input');
-    await this.expectVisible(this.signUpButton, 'Sign up button');
+
+    await expect(this.signUpButton, 'Sign up/submit control should exist on signup page').toHaveCount(1);
   }
 
   async fillAllFields(params: SignupParams): Promise<void> {

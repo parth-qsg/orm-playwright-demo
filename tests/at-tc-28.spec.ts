@@ -8,7 +8,7 @@ class SignupPage {
       .getByLabel(/email/i)
       .or(this.page.getByPlaceholder(/email/i))
       .or(this.page.getByRole('textbox', { name: /email/i }))
-      .or(this.page.locator('input[type="email"], input[name*="email" i], input[id*="email" i]'));
+      .or(this.page.locator('input[type="email"], input[name*="email" i], input[id*="email" i], input[autocomplete="email"], input[autocomplete="username"], input[type="text"][name*="user" i]'));
   }
 
   private get passwordTextbox(): Locator {
@@ -61,17 +61,28 @@ class SignupPage {
 
     for (const url of candidates) {
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
-      await this.page.waitForLoadState('networkidle').catch(() => undefined);
 
-      // Consider the page a valid signup page if we can interact with the email field
-      // or if a signup form is present (some apps don't render a heading).
-      const emailVisible = await this.emailTextbox.first().isVisible().catch(() => false);
-      const formVisible = await this.page.locator('form').first().isVisible().catch(() => false);
-      if (emailVisible || formVisible) return;
+      // Some apps render the form after initial load; wait for either a form or an email-like field.
+      await Promise.race([
+        this.page.waitForSelector('form', { state: 'visible', timeout: 8000 }).catch(() => undefined),
+        this.page
+          .locator(
+            'input[type="email"], input[name*="email" i], input[id*="email" i], input[autocomplete="email"], input[autocomplete="username"]',
+          )
+          .first()
+          .waitFor({ state: 'visible', timeout: 8000 })
+          .catch(() => undefined),
+      ]);
+
+      const emailCount = await this.emailTextbox.count().catch(() => 0);
+      if (emailCount > 0) {
+        await expect(this.emailTextbox.first()).toBeVisible({ timeout: 8000 });
+        return;
+      }
     }
 
-    // Fallback assertion: at least a signup form/email field should exist.
-    await expect(this.emailTextbox.first()).toBeVisible();
+    // Final fallback: assert we can find an email field on the current page.
+    await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
   }
 
   async assertOnSignupPage(): Promise<void> {
