@@ -52,7 +52,6 @@ class BaseUiPage {
 
 class SignupPage extends BaseUiPage {
   private get signupHeading(): Locator {
-    // Some apps don't render a dedicated heading; use a broader, still user-facing signal.
     return this.page.getByRole('heading', { name: /sign up|signup|create account|register/i });
   }
 
@@ -61,21 +60,27 @@ class SignupPage extends BaseUiPage {
   }
 
   private get fullNameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /full name|name/i });
+    return this.page
+      .getByLabel(/full name|name/i)
+      .or(this.page.locator('input[name="fullName"], input[name="name"], input#fullName, input#name'));
   }
 
   private get usernameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /username/i });
+    return this.page
+      .getByLabel(/username/i)
+      .or(this.page.locator('input[name="username"], input#username'));
   }
 
   private get emailTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /email/i });
+    return this.page
+      .getByLabel(/email/i)
+      .or(this.page.locator('input[type="email"], input[name="email"], input#email'));
   }
 
   private get passwordTextbox(): Locator {
-    // Many apps expose password as role=textbox with accessible name 'Password'.
-    // If your app uses role 'textbox' with type=password, this still works.
-    return this.page.getByRole('textbox', { name: /password/i });
+    return this.page
+      .getByLabel(/password/i)
+      .or(this.page.locator('input[type="password"], input[name="password"], input#password'));
   }
 
   private get signUpButton(): Locator {
@@ -83,7 +88,6 @@ class SignupPage extends BaseUiPage {
   }
 
   private get passwordRequiredValidationMessage(): Locator {
-    // Prefer exact expected message, but allow common variants.
     return this.page.getByText(/password is required|required password|password required/i);
   }
 
@@ -93,7 +97,6 @@ class SignupPage extends BaseUiPage {
   }
 
   async assertSignupPageDisplayed(): Promise<void> {
-    // Primary: heading. Fallback: presence of the signup form fields.
     const headingCount = await this.signupHeading.count();
     if (headingCount > 0) {
       await expect(this.signupHeading.first()).toBeVisible();
@@ -126,7 +129,6 @@ class SignupPage extends BaseUiPage {
   }
 
   async assertSignupSubmissionBlocked(): Promise<void> {
-    // Deterministic business outcome: still on signup/register page.
     await expect(this.page).toHaveURL(/signup|register/i);
   }
 
