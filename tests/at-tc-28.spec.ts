@@ -4,11 +4,15 @@ class SignupPage {
   constructor(private readonly page: Page) {}
 
   private get emailTextbox(): Locator {
+    // Prefer stable, semantic locators but include common auth-provider variants.
     return this.page
       .getByLabel(/email/i)
       .or(this.page.getByPlaceholder(/email/i))
       .or(this.page.getByRole('textbox', { name: /email/i }))
-      .or(this.page.locator('input[type="email"], input[name*="email" i], input[id*="email" i], input[autocomplete="email"], input[autocomplete="username"], input[type="text"][name*="user" i]'));
+      .or(this.page.locator('input[type="email"]'))
+      .or(this.page.locator('input[autocomplete="email"], input[autocomplete="username"]'))
+      .or(this.page.locator('input[name*="email" i], input[id*="email" i]'))
+      .or(this.page.locator('input[name="username"], input[id="username"], input[name*="user" i], input[id*="user" i]'));
   }
 
   private get passwordTextbox(): Locator {
@@ -62,26 +66,25 @@ class SignupPage {
     for (const url of candidates) {
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
 
-      // Some apps render the form after initial load; wait for either a form or an email-like field.
+      // Wait for either a form or any plausible email/username field to appear.
       await Promise.race([
-        this.page.waitForSelector('form', { state: 'visible', timeout: 8000 }).catch(() => undefined),
+        this.page.waitForSelector('form', { state: 'visible', timeout: 12000 }).catch(() => undefined),
         this.page
           .locator(
-            'input[type="email"], input[name*="email" i], input[id*="email" i], input[autocomplete="email"], input[autocomplete="username"]',
+            'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name="username"], input[id="username"], input[name*="user" i], input[id*="user" i]',
           )
           .first()
-          .waitFor({ state: 'visible', timeout: 8000 })
+          .waitFor({ state: 'visible', timeout: 12000 })
           .catch(() => undefined),
       ]);
 
       const emailCount = await this.emailTextbox.count().catch(() => 0);
       if (emailCount > 0) {
-        await expect(this.emailTextbox.first()).toBeVisible({ timeout: 8000 });
+        await expect(this.emailTextbox.first()).toBeVisible({ timeout: 12000 });
         return;
       }
     }
 
-    // Final fallback: assert we can find an email field on the current page.
     await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
   }
 
