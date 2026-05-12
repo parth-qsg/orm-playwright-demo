@@ -144,14 +144,18 @@ class HealthApi {
 
   async getHealth(): Promise<{ response: APIResponse; body: JsonRecord; pathUsed: string }> {
     const configuredPath = (process.env.HEALTH_PATH ?? '').trim();
+
+    // Try common health endpoints. Prefer actuator first (common in Spring apps) to avoid false 404s.
     const candidatePaths = [
-      normalizePath(configuredPath || '/health'),
-      // Common alternates across frameworks (Spring Boot, etc.)
+      normalizePath(configuredPath || ''),
       '/actuator/health',
+      '/health',
       '/api/health',
       '/healthz',
       '/status',
-    ].filter((p, idx, arr) => arr.indexOf(p) === idx);
+    ]
+      .filter(Boolean)
+      .filter((p, idx, arr) => arr.indexOf(p) === idx);
 
     let lastResponse: APIResponse | undefined;
     let lastBodyText = '';
@@ -171,27 +175,30 @@ class HealthApi {
       const looksLikeJson = /^[\s\r\n]*[\[{]/.test(bodyText);
       const looksLikeHtml = /<!doctype html>|<html[\s>]/i.test(bodyText);
 
-      // If we got HTML, it's likely a UI route; try next candidate.
+      // Skip UI/login pages.
       if (looksLikeHtml) continue;
 
-      // If it looks like JSON (or is declared JSON), attempt to parse.
+      // Only accept successful JSON responses.
+      if (res.status() !== 200) continue;
+
       if (contentType.toLowerCase().includes('application/json') || looksLikeJson) {
         try {
           const body = JSON.parse(bodyText) as JsonRecord;
           return { response: res, body, pathUsed: path };
         } catch {
-          // Try next candidate.
+          // try next candidate
         }
       }
-
-      // If it's a clear 404, try next candidate.
-      if (res.status() === 404) continue;
     }
 
-    // Fall back to the original safe parser for a helpful error message.
     if (!lastResponse) throw new Error('No response received from health endpoint candidates.');
-    const body = await parseJsonSafely<JsonRecord>(lastResponse);
-    return { response: lastResponse, body, pathUsed: candidatePaths[0] ?? '/health' };
+
+    // Provide a clearer error than attempting to parse HTML/404 bodies as JSON.
+    const ct = lastResponse.headers()['content-type'] ?? '';
+    throw new Error(
+      `Health endpoint not found / not returning JSON 200. Tried: ${candidatePaths.join(', ')}. ` +
+        `Last status: ${lastResponse.status()}. content-type: ${ct}. Body: ${lastBodyText}`,
+    );
   }
 
   extractAssertions(body: JsonRecord): HealthAssertions {
