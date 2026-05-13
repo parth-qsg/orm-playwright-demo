@@ -22,7 +22,7 @@ class SignupPage {
       .or(this.page.getByPlaceholder(/email/i))
       .or(
         this.page.locator(
-          'input[name="email"], input#email, input[type="email"], input[autocomplete="email"], input[placeholder*="mail" i]',
+          'input[name="email"], input#email, input[type="email"], input[autocomplete="email"], input[placeholder*="mail" i], input[name="username"], input#username, input[autocomplete="username"]',
         ),
       );
   }
@@ -61,7 +61,7 @@ class SignupPage {
       await signupTab.click();
     }
 
-    // Prefer resilient, user-facing locators; fall back to common attributes.
+    // Wait for any email/username field to appear.
     await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
   }
 
@@ -82,6 +82,7 @@ class SignupPage {
   }
 
   async assertPasswordRequiredValidation(): Promise<void> {
+    // Prefer native HTML5 validation if present.
     const nativeMessage = await this.passwordTextbox.evaluate((el) => {
       const input = el as HTMLInputElement;
       return input.validationMessage ?? '';
@@ -92,6 +93,7 @@ class SignupPage {
       return;
     }
 
+    // Otherwise, assert an inline validation message is shown.
     const inlineError = this.page
       .locator('[role="alert"], [aria-live], .error, .errors, .invalid-feedback, .field-error, .helper-text')
       .filter({ hasText: /password.*required|required.*password|password is required|required/i });
