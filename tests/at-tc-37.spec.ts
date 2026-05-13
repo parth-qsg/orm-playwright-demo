@@ -28,14 +28,22 @@ class MinimalSignupPage {
       .or(this.page.getByPlaceholder(/^password$/i))
       .or(this.page.getByLabel(/password/i))
       .or(this.page.getByPlaceholder(/password/i))
-      .or(this.page.locator('input[type="password"][autocomplete="new-password"], input[autocomplete="new-password"]'))
+      .or(
+        this.page.locator(
+          'input[type="password"][autocomplete="new-password"], input[autocomplete="new-password"]',
+        ),
+      )
       .or(this.page.locator('input[type="password"]'));
   }
 
   private get confirmPasswordTextbox(): Locator {
     return this.page
       .getByLabel(/confirm password|password confirmation|re-enter password|repeat password/i)
-      .or(this.page.getByPlaceholder(/confirm password|password confirmation|re-enter password|repeat password/i))
+      .or(
+        this.page.getByPlaceholder(
+          /confirm password|password confirmation|re-enter password|repeat password/i,
+        ),
+      )
       .or(this.page.locator('input[name*="confirm" i][type="password"], input[id*="confirm" i][type="password"]'));
   }
 
@@ -67,7 +75,6 @@ class MinimalSignupPage {
 
     const root = baseUrl.replace(/\/$/, '');
 
-    // Preconditions: user is not authenticated.
     await this.page.context().clearCookies();
     await this.page.addInitScript(() => {
       try {
@@ -94,14 +101,6 @@ class MinimalSignupPage {
     for (const url of candidates) {
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
 
-      // If already authenticated, many apps redirect away from signup.
-      // In that case, clear state and try next candidate.
-      if (await this.authenticatedMarker.first().isVisible().catch(() => false)) {
-        await this.page.context().clearCookies();
-        await this.page.goto(url, { waitUntil: 'domcontentloaded' });
-      }
-
-      // Some apps land on a generic auth page with a CTA to open the signup form.
       const openSignupCta = this.page
         .getByRole('link', { name: /sign up|sign-up|signup|create account|register/i })
         .or(this.page.getByRole('button', { name: /sign up|sign-up|signup|create account|register/i }));
@@ -109,40 +108,40 @@ class MinimalSignupPage {
         await openSignupCta.first().click().catch(() => undefined);
       }
 
-      // Wait for either email/password field or a signup heading to appear.
+      // Some apps render the form after hydration; wait for a stable, semantic marker.
       await Promise.race([
-        this.emailTextbox.first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined),
-        this.passwordTextbox.first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined),
-        this.page.getByRole('heading', { name: /sign up|signup|create account|register/i }).first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined),
+        this.emailTextbox.first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => undefined),
+        this.passwordTextbox.first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => undefined),
+        this.submitButton.waitFor({ state: 'visible', timeout: 8000 }).catch(() => undefined),
+        this.page
+          .getByRole('heading', { name: /sign up|signup|create account|register/i })
+          .first()
+          .waitFor({ state: 'visible', timeout: 8000 })
+          .catch(() => undefined),
       ]);
 
       if (await this.emailTextbox.first().isVisible().catch(() => false)) return;
       if (await this.passwordTextbox.first().isVisible().catch(() => false)) return;
-
-      // Some signup forms use inputs without accessible roles; fall back to input elements.
-      const anyInput = this.page.locator('input').first();
-      if (await anyInput.isVisible().catch(() => false)) return;
+      if (await this.submitButton.isVisible().catch(() => false)) return;
     }
 
-    // Final fallback: ensure at least one input is present.
-    await expect(this.page.locator('input').first()).toBeVisible({ timeout: 15000 });
+    // Final fallback: ensure we are on a signup/register page rather than asserting a generic input.
+    await expect(
+      this.page.getByRole('heading', { name: /sign up|signup|create account|register/i }).first(),
+    ).toBeVisible({ timeout: 15000 });
   }
 
   async assertSignupPageDisplayed(): Promise<void> {
     const emailVisible = await this.emailTextbox.first().isVisible().catch(() => false);
-    if (emailVisible) {
-      await expect(this.emailTextbox.first()).toBeVisible();
-    } else {
-      await expect(this.page.getByRole('textbox').first()).toBeVisible();
-    }
+    if (emailVisible) await expect(this.emailTextbox.first()).toBeVisible();
     await expect(this.passwordTextbox.first()).toBeVisible();
     await expect(this.submitButton).toBeVisible();
   }
 
   async fillMinimalRequiredFields(params: { email: string; password: string }): Promise<void> {
-    // Only fill name if it exists; testcase requires minimal payload.
+    // Minimal payload: do not fill optional fields.
     if ((await this.nameTextbox.count().catch(() => 0)) > 0) {
-      // Leave blank intentionally.
+      // intentionally left blank
     }
 
     await this.emailTextbox.first().fill(params.email);
@@ -173,16 +172,13 @@ class MinimalSignupPage {
   }
 
   async assertAuthenticatedSessionEstablished(): Promise<void> {
-    // UI marker
     await expect(this.authenticatedMarker.first()).toBeVisible({ timeout: 20000 });
 
-    // Best-effort token/session check (implementation varies by app).
     const hasAuthArtifact = await this.page.evaluate(() => {
       const cookieNames = document.cookie
         .split(';')
         .map((c) => c.trim().split('=')[0])
         .filter(Boolean);
-
       const cookieHit = cookieNames.some((n) => /auth|token|session|jwt/i.test(n));
 
       const storageKeys: string[] = [];
@@ -196,8 +192,8 @@ class MinimalSignupPage {
       } catch {
         // ignore
       }
-
       const storageHit = storageKeys.some((k) => /auth|token|session|jwt/i.test(k));
+
       return cookieHit || storageHit;
     });
 
@@ -205,13 +201,10 @@ class MinimalSignupPage {
   }
 
   async assertHomeShowsLoggedInUi(): Promise<void> {
-    // Either a greeting text or an authenticated marker should be visible.
-    const greetingVisible = await this.greetingText.first().isVisible().catch(() => false);
-    if (greetingVisible) {
+    if (await this.greetingText.first().isVisible().catch(() => false)) {
       await expect(this.greetingText.first()).toBeVisible();
       return;
     }
-
     await expect(this.authenticatedMarker.first()).toBeVisible();
   }
 }
