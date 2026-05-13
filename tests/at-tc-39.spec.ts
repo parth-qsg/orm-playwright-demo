@@ -2,7 +2,7 @@ import { expect, Locator, Page, test } from '@playwright/test';
 
 function getBaseUrl(): string {
   const baseUrl = process.env.BASE_URL;
-  test.skip(!baseUrl, 'Missing BASE_URL environment variable.');
+  test.skip(!baseUrl, 'Missing BASE_URL environment variable for UI tests.');
   return baseUrl!.replace(/\/$/, '');
 }
 
@@ -17,7 +17,6 @@ class SignupPage {
   private get emailTextbox(): Locator {
     return this.page
       .getByRole('textbox', { name: /email/i })
-      .or(this.page.getByRole('textbox', { name: /e-?mail/i }))
       .or(this.page.getByLabel(/email/i))
       .or(this.page.getByPlaceholder(/email/i))
       .or(
@@ -44,35 +43,81 @@ class SignupPage {
 
   async goto(): Promise<void> {
     const base = getBaseUrl();
-    const candidates: string[] = [`${base}/signup`, `${base}/sign-up`, `${base}/register`, `${base}/auth/signup`];
+
+    await this.page.context().clearCookies();
+    await this.page.addInitScript(() => {
+      try {
+        localStorage.clear();
+      } catch {
+        // ignore
+      }
+      try {
+        sessionStorage.clear();
+      } catch {
+        // ignore
+      }
+    });
+
+    // Some apps expose signup as a modal/tab from the home or auth page.
+    const candidates: string[] = [
+      `${base}/signup`,
+      `${base}/sign-up`,
+      `${base}/register`,
+      `${base}/auth/signup`,
+      `${base}/auth`,
+      `${base}/login`,
+      `${base}/sign-in`,
+      `${base}/`,
+    ];
 
     for (const url of candidates) {
       const response = await this.page.goto(url, { waitUntil: 'domcontentloaded' });
-      if (response && response.status() !== 404) break;
+      if (response && response.status() !== 404) {
+        const found = await this.tryOpenSignupAndWaitForForm();
+        if (found) return;
+      }
     }
 
+    // Final attempt: if navigation succeeded but form is behind a tab/modal.
+    await this.tryOpenSignupAndWaitForForm();
     await this.assertOnSignupPage();
   }
 
+  private async tryOpenSignupAndWaitForForm(): Promise<boolean> {
+    const openSignup = this.page
+      .getByRole('link', { name: /sign up|signup|register|create account/i })
+      .or(this.page.getByRole('button', { name: /sign up|signup|register|create account/i }))
+      .or(this.page.getByRole('tab', { name: /sign up|signup|register|create account/i }));
+
+    if (await openSignup.first().isVisible().catch(() => false)) {
+      await openSignup.first().click();
+    }
+
+    const email = this.emailTextbox.first();
+    const password = this.passwordTextbox.first();
+
+    const emailVisible = await email.isVisible().catch(() => false);
+    const passwordVisible = await password.isVisible().catch(() => false);
+    return emailVisible || passwordVisible;
+  }
+
   async assertOnSignupPage(): Promise<void> {
-    // Some apps render signup as a tab within an auth page.
     const signupTab = this.page.getByRole('tab', { name: /sign up|signup|register|create account/i });
     if (await signupTab.isVisible().catch(() => false)) {
       await signupTab.click();
     }
 
-    // Wait for any email/username field to appear.
     await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
   }
 
   async fillEmail(email: string): Promise<void> {
-    await expect(this.emailTextbox).toBeVisible();
-    await this.emailTextbox.fill(email);
+    await expect(this.emailTextbox.first()).toBeVisible();
+    await this.emailTextbox.first().fill(email);
   }
 
   async assertPasswordEmpty(): Promise<void> {
-    await expect(this.passwordTextbox).toBeVisible();
-    await expect(this.passwordTextbox).toHaveValue('');
+    await expect(this.passwordTextbox.first()).toBeVisible();
+    await expect(this.passwordTextbox.first()).toHaveValue('');
   }
 
   async submit(): Promise<void> {
@@ -83,7 +128,7 @@ class SignupPage {
 
   async assertPasswordRequiredValidation(): Promise<void> {
     // Prefer native HTML5 validation if present.
-    const nativeMessage = await this.passwordTextbox.evaluate((el) => {
+    const nativeMessage = await this.passwordTextbox.first().evaluate((el) => {
       const input = el as HTMLInputElement;
       return input.validationMessage ?? '';
     });
