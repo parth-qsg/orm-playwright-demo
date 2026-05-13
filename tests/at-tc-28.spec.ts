@@ -60,35 +60,48 @@ class SignupPage {
     // Preconditions: no user is currently authenticated.
     await this.page.context().clearCookies();
 
-    const candidates = [`${root}/signup`, `${root}/register`, `${root}/auth/signup`, `${root}/auth/register`];
-
-    const emailOrUsername = this.page
-      .getByLabel(/email|e-mail|username|user name/i)
-      .or(this.page.getByPlaceholder(/email|e-mail|username|user name/i))
-      .or(
-        this.page.locator(
-          'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name="username"], input[id="username"], input[name*="user" i], input[id*="user" i]',
-        ),
-      );
+    const candidates = [
+      `${root}/signup`,
+      `${root}/register`,
+      `${root}/auth/signup`,
+      `${root}/auth/register`,
+      `${root}/sign-up`,
+      `${root}/create-account`,
+    ];
 
     for (const url of candidates) {
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
 
       // Some apps render signup inside a modal opened from a CTA.
       const openSignupCta = this.page
-        .getByRole('link', { name: /sign up|signup|create account|register/i })
-        .or(this.page.getByRole('button', { name: /sign up|signup|create account|register/i }));
+        .getByRole('link', { name: /sign up|sign-up|signup|create account|register/i })
+        .or(this.page.getByRole('button', { name: /sign up|sign-up|signup|create account|register/i }));
       if ((await openSignupCta.count().catch(() => 0)) > 0) {
         await openSignupCta.first().click().catch(() => undefined);
       }
 
-      if (await emailOrUsername.first().isVisible().catch(() => false)) return;
+      // Prefer the page object's own locator set (more complete) and allow for multi-step forms.
+      const email = this.emailTextbox.first();
+      const password = this.passwordTextbox.first();
 
-      await emailOrUsername.first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
-      if (await emailOrUsername.first().isVisible().catch(() => false)) return;
+      if (await email.isVisible().catch(() => false)) return;
+
+      // Some apps start with "name" and reveal email/password after.
+      const continueBtn = this.page
+        .getByRole('button', { name: /continue|next/i })
+        .or(this.page.getByRole('button', { name: /get started/i }));
+      if ((await continueBtn.count().catch(() => 0)) > 0) {
+        await continueBtn.first().click().catch(() => undefined);
+      }
+
+      await email.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
+      if (await email.isVisible().catch(() => false)) return;
+
+      // Fallback: if email isn't present but password is, still consider this a signup form.
+      if (await password.isVisible().catch(() => false)) return;
     }
 
-    await expect(emailOrUsername.first()).toBeVisible({ timeout: 15000 });
+    await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
   }
 
   async assertOnSignupPage(): Promise<void> {
