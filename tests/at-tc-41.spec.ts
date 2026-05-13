@@ -14,7 +14,8 @@ function getReferralCode(): string {
 
 function uniqueEmail(): string {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '');
-  return `pw.signup.${stamp}@example.test`;
+  const worker = process.env.TEST_WORKER_INDEX ?? '0';
+  return `pw.signup.${stamp}.w${worker}@example.test`;
 }
 
 function strongPassword(): string {
@@ -38,19 +39,27 @@ class SignupPage {
   }
 
   private get passwordTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /^password$/i });
+    return this.page.getByLabel(/^password$/i).or(this.page.getByRole('textbox', { name: /^password$/i }));
   }
 
   private get confirmPasswordTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /confirm password|password confirmation/i });
+    return this.page
+      .getByLabel(/confirm password|password confirmation/i)
+      .or(this.page.getByRole('textbox', { name: /confirm password|password confirmation/i }));
   }
 
   private get referralCodeTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /referral code|referral|invite code|invitation code|promo code/i });
+    return this.page
+      .getByLabel(/referral code|referral|invite code|invitation code|promo code/i)
+      .or(this.page.getByRole('textbox', { name: /referral code|referral|invite code|invitation code|promo code/i }));
   }
 
   private get signupButton(): Locator {
     return this.page.getByRole('button', { name: /sign up|signup|register|create account/i });
+  }
+
+  private get submitButton(): Locator {
+    return this.page.getByRole('button', { name: /submit|continue/i });
   }
 
   private get signupHeading(): Locator {
@@ -112,9 +121,10 @@ class SignupPage {
   }
 
   async submit(): Promise<void> {
-    await expect(this.signupButton).toBeVisible();
-    await expect(this.signupButton).toBeEnabled();
-    await this.signupButton.click();
+    const button = (await this.signupButton.isVisible().catch(() => false)) ? this.signupButton : this.submitButton;
+    await expect(button).toBeVisible();
+    await expect(button).toBeEnabled();
+    await button.click();
   }
 }
 
@@ -137,10 +147,14 @@ class AuthenticatedUi {
     return this.page.getByRole('button', { name: /log in|login|sign in/i });
   }
 
+  private get loginLink(): Locator {
+    return this.page.getByRole('link', { name: /log in|login|sign in/i });
+  }
+
   async assertOnHomeAndAuthenticated(): Promise<void> {
     await expect(this.page).not.toHaveURL(/\/(signup|sign-up|register|auth\/signup)(?:\?.*)?$/);
     await expect(this.logoutButton.or(this.accountMenuButton).or(this.homeHeading)).toBeVisible({ timeout: 20000 });
-    await expect(this.loginButton).toBeHidden();
+    await expect(this.loginButton.or(this.loginLink)).toBeHidden();
   }
 }
 
