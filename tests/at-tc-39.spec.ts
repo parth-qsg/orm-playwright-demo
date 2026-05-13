@@ -20,14 +20,22 @@ class SignupPage {
       .or(this.page.getByRole('textbox', { name: /e-?mail/i }))
       .or(this.page.getByLabel(/email/i))
       .or(this.page.getByPlaceholder(/email/i))
-      .or(this.page.locator('input[name="email"], input#email, input[type="email"], input[autocomplete="email"], input[placeholder*="mail" i]'));
+      .or(
+        this.page.locator(
+          'input[name="email"], input#email, input[type="email"], input[autocomplete="email"], input[placeholder*="mail" i]',
+        ),
+      );
   }
 
   private get passwordTextbox(): Locator {
     return this.page
       .getByLabel(/password/i)
       .or(this.page.getByPlaceholder(/password/i))
-      .or(this.page.locator('input[name="password"], input#password, input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]'));
+      .or(
+        this.page.locator(
+          'input[name="password"], input#password, input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]',
+        ),
+      );
   }
 
   private get signupButton(): Locator {
@@ -53,9 +61,8 @@ class SignupPage {
       await signupTab.click();
     }
 
-    // Wait for any email input to exist (label/placeholder may be missing).
-    const emailFallback = this.page.locator('input[type="email"], input[autocomplete="email"], input[name*="email" i], input[id*="email" i]');
-    await expect(emailFallback.first()).toBeVisible({ timeout: 15000 });
+    // Prefer resilient, user-facing locators; fall back to common attributes.
+    await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
   }
 
   async fillEmail(email: string): Promise<void> {
@@ -75,7 +82,6 @@ class SignupPage {
   }
 
   async assertPasswordRequiredValidation(): Promise<void> {
-    // Prefer native HTML5 validation message if present.
     const nativeMessage = await this.passwordTextbox.evaluate((el) => {
       const input = el as HTMLInputElement;
       return input.validationMessage ?? '';
@@ -86,7 +92,6 @@ class SignupPage {
       return;
     }
 
-    // Otherwise, look for common inline error patterns.
     const inlineError = this.page
       .locator('[role="alert"], [aria-live], .error, .errors, .invalid-feedback, .field-error, .helper-text')
       .filter({ hasText: /password.*required|required.*password|password is required|required/i });
