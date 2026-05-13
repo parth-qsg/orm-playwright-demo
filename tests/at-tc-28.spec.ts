@@ -67,6 +67,9 @@ class SignupPage {
       `${root}/auth/register`,
       `${root}/sign-up`,
       `${root}/create-account`,
+      `${root}/auth`,
+      `${root}/login`,
+      `${root}/sign-in`,
     ];
 
     for (const url of candidates) {
@@ -80,10 +83,11 @@ class SignupPage {
         await openSignupCta.first().click().catch(() => undefined);
       }
 
-      // Prefer the page object's own locator set (more complete) and allow for multi-step forms.
       const email = this.emailTextbox.first();
       const password = this.passwordTextbox.first();
 
+      // Wait a bit for client-side hydration/rendering.
+      await email.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
       if (await email.isVisible().catch(() => false)) return;
 
       // Some apps start with "name" and reveal email/password after.
@@ -97,8 +101,17 @@ class SignupPage {
       await email.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
       if (await email.isVisible().catch(() => false)) return;
 
-      // Fallback: if email isn't present but password is, still consider this a signup form.
+      await password.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
       if (await password.isVisible().catch(() => false)) return;
+    }
+
+    // Fallback: at least ensure we're on some auth page and can reach signup.
+    await this.page.goto(`${root}/`, { waitUntil: 'domcontentloaded' });
+    const openSignupCta = this.page
+      .getByRole('link', { name: /sign up|sign-up|signup|create account|register/i })
+      .or(this.page.getByRole('button', { name: /sign up|sign-up|signup|create account|register/i }));
+    if ((await openSignupCta.count().catch(() => 0)) > 0) {
+      await openSignupCta.first().click();
     }
 
     await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
