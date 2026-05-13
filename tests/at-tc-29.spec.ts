@@ -170,21 +170,21 @@ class AuthenticatedApp {
 test.describe('AT-TC-29 - Verify user remains logged in after refreshing the page post-signup', {
   tag: ['@functional', '@secure'],
 }, () => {
-  test('AT-TC-29 - Session persists after refresh and navigation', async ({ page }) => {
+  test('AT-TC-29 - User remains authenticated after refresh and navigation', async ({ page }) => {
     const app = new AuthenticatedApp(page);
 
-    // Arrange (precondition: user is authenticated after signup). We satisfy it via env-based authentication.
+    // Arrange (precondition: user is authenticated after signup). Satisfied via env-based authentication.
     await app.loginWithEnvCredentials();
     await app.gotoHome();
     await app.assertAuthenticated();
 
-    // Act: refresh the page
+    // Act: refresh the browser page
     await app.refreshAndWaitForReady();
 
     // Assert: user remains authenticated after refresh
     await app.assertAuthenticated();
 
-    // Act + Assert: navigate elsewhere and confirm session persists
+    // Act + Assert: navigate to another page and confirm session persists
     await app.navigateToAnotherPageAndAssertSessionPersists();
   });
 });
