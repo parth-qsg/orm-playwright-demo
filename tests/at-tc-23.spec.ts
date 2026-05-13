@@ -1,12 +1,12 @@
 import { test } from '@playwright/test';
 import { OrangeHrmLoginPage } from './pages.orangehrm';
 
-interface OrangeHrmAuthEnv {
+interface AuthEnv {
   username: string;
   password: string;
 }
 
-function getAuthEnv(): OrangeHrmAuthEnv {
+function getAuthEnv(): AuthEnv {
   const username = process.env.TEST_USERNAME ?? process.env.APP_USERNAME;
   const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
 
@@ -20,23 +20,23 @@ function getAuthEnv(): OrangeHrmAuthEnv {
 }
 
 test.describe(
-  'AT-TC-23 - Login security - Secure error messaging on incorrect password',
-  { tag: ['@functional', '@security', '@high'] },
+  'AT-TC-23 - Secure error messaging on incorrect password',
+  { tag: ['@functional', '@secure'] },
   () => {
-    test('AT-TC-23 - Valid username + incorrect password fails with generic error messaging', async ({ page }) => {
+    test('Authentication fails with secure, non-revealing error messaging', async ({ page }) => {
       const loginPage = new OrangeHrmLoginPage(page);
       const { username, password } = getAuthEnv();
 
-      // Arrange: Open the login page
+      // Arrange
       await loginPage.goto();
       await loginPage.assertOnLoginPage();
 
-      // Act: Enter valid username and incorrect password, then attempt login
+      // Act
       await loginPage.fillUsername(username);
       await loginPage.fillPassword(`${password}-incorrect`);
       await loginPage.clickLogin();
 
-      // Assert: Authentication fails with secure, non-revealing error messaging
+      // Assert
       await loginPage.assertOnLoginPage();
       await loginPage.assertSecureInvalidCredentialsMessageVisible();
     });
