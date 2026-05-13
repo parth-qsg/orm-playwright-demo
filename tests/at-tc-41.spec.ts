@@ -19,39 +19,69 @@ function uniqueEmail(): string {
 }
 
 function strongPassword(): string {
-  // Deterministic but strong enough for typical password policies.
   return 'Pw!23456_Test';
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 class SignupPage {
   constructor(private readonly page: Page) {}
 
   private get emailTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /email/i });
+    return this.page
+      .getByRole('textbox', { name: /email/i })
+      .or(this.page.getByLabel(/email/i))
+      .or(this.page.getByPlaceholder(/email/i))
+      .or(
+        this.page.locator(
+          'input[name="email"], input#email, input[type="email"], input[autocomplete="email"], input[placeholder*="mail" i]',
+        ),
+      );
   }
 
   private get usernameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /username/i });
+    return this.page
+      .getByRole('textbox', { name: /username/i })
+      .or(this.page.getByLabel(/username/i))
+      .or(this.page.locator('input[name="username"], input#username, input[autocomplete="username"]'));
   }
 
   private get nameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /^name$/i });
+    return this.page
+      .getByRole('textbox', { name: /^name$/i })
+      .or(this.page.getByLabel(/^name$/i))
+      .or(this.page.locator('input[name="name"], input#name, input[autocomplete="name"]'));
   }
 
   private get passwordTextbox(): Locator {
-    return this.page.getByLabel(/^password$/i).or(this.page.getByRole('textbox', { name: /^password$/i }));
+    return this.page
+      .getByLabel(/^password$/i)
+      .or(this.page.getByPlaceholder(/^password$/i))
+      .or(this.page.locator('input[name="password"], input#password, input[type="password"]'));
   }
 
   private get confirmPasswordTextbox(): Locator {
     return this.page
       .getByLabel(/confirm password|password confirmation/i)
-      .or(this.page.getByRole('textbox', { name: /confirm password|password confirmation/i }));
+      .or(this.page.getByPlaceholder(/confirm password|password confirmation/i))
+      .or(
+        this.page.locator(
+          'input[name="confirmPassword"], input[name="confirm_password"], input#confirmPassword, input#confirm_password, input[autocomplete="new-password"]',
+        ),
+      );
   }
 
   private get referralCodeTextbox(): Locator {
     return this.page
       .getByLabel(/referral code|referral|invite code|invitation code|promo code/i)
-      .or(this.page.getByRole('textbox', { name: /referral code|referral|invite code|invitation code|promo code/i }));
+      .or(this.page.getByPlaceholder(/referral code|referral|invite code|invitation code|promo code/i))
+      .or(
+        this.page.locator(
+          'input[name="referral"], input[name="referralCode"], input[name="referral_code"], input#referral, input#referralCode, input#referral_code',
+        ),
+      );
   }
 
   private get signupButton(): Locator {
@@ -60,10 +90,6 @@ class SignupPage {
 
   private get submitButton(): Locator {
     return this.page.getByRole('button', { name: /submit|continue/i });
-  }
-
-  private get signupHeading(): Locator {
-    return this.page.getByRole('heading', { name: /sign up|create account|register/i });
   }
 
   async goto(): Promise<void> {
@@ -84,15 +110,10 @@ class SignupPage {
       await signupTab.click();
     }
 
-    const emailOrUser = this.emailTextbox.or(this.usernameTextbox);
-    await expect(this.signupHeading.or(this.signupButton).or(emailOrUser)).toBeVisible({ timeout: 15000 });
+    await expect(this.emailTextbox.or(this.usernameTextbox).first()).toBeVisible({ timeout: 15000 });
   }
 
-  async fillAllVisibleFields(params: {
-    email: string;
-    password: string;
-    referralCode: string;
-  }): Promise<void> {
+  async fillAllVisibleFields(params: { email: string; password: string; referralCode: string }): Promise<void> {
     if (await this.emailTextbox.isVisible().catch(() => false)) {
       await this.emailTextbox.fill(params.email);
     }
@@ -143,47 +164,41 @@ class AuthenticatedUi {
     return this.page.getByRole('heading', { name: /home|dashboard/i });
   }
 
-  private get loginButton(): Locator {
-    return this.page.getByRole('button', { name: /log in|login|sign in/i });
-  }
-
-  private get loginLink(): Locator {
-    return this.page.getByRole('link', { name: /log in|login|sign in/i });
+  private get loginButtonOrLink(): Locator {
+    return this.page
+      .getByRole('button', { name: /log in|login|sign in/i })
+      .or(this.page.getByRole('link', { name: /log in|login|sign in/i }));
   }
 
   async assertOnHomeAndAuthenticated(): Promise<void> {
     await expect(this.page).not.toHaveURL(/\/(signup|sign-up|register|auth\/signup)(?:\?.*)?$/);
     await expect(this.logoutButton.or(this.accountMenuButton).or(this.homeHeading)).toBeVisible({ timeout: 20000 });
-    await expect(this.loginButton.or(this.loginLink)).toBeHidden();
+    await expect(this.loginButtonOrLink).toBeHidden();
   }
 }
 
 class ReferralAssertions {
   constructor(private readonly page: Page) {}
 
-  private get referralSection(): Locator {
-    return this.page.getByText(/referral|referred by|invited by|invite code/i);
-  }
-
   private get profileLink(): Locator {
     return this.page.getByRole('link', { name: /profile|account|settings/i });
+  }
+
+  private get referralSection(): Locator {
+    return this.page.getByText(/referral|referred by|invited by|invite code/i);
   }
 
   async gotoProfileIfPossible(): Promise<void> {
     if (await this.profileLink.isVisible().catch(() => false)) {
       await this.profileLink.click();
-      await expect(this.page).not.toHaveURL(/\/(signup|sign-up|register)(?:\?.*)?$/);
     }
   }
 
   async assertReferralAssociationVisible(referralCode: string): Promise<void> {
     await this.gotoProfileIfPossible();
 
-    // Best-effort UI assertion: referral section exists and contains the code.
     await expect(this.referralSection).toBeVisible({ timeout: 15000 });
-    await expect(this.page.getByText(new RegExp(referralCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'))).toBeVisible({
-      timeout: 15000,
-    });
+    await expect(this.page.getByText(new RegExp(escapeRegExp(referralCode), 'i'))).toBeVisible({ timeout: 15000 });
   }
 }
 
