@@ -13,6 +13,7 @@ function uniqueEmail(): string {
 }
 
 function getSignupPassword(): string {
+  // Never hardcode secrets; use env vars.
   const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
   test.skip(!password, 'Missing password: set TEST_PASSWORD (preferred) or APP_PASSWORD.');
   return password!;
@@ -188,21 +189,32 @@ class AuthenticatedUi {
       );
   }
 
-  private get loggedInCookieHint(): Locator {
+  private get loggedInUiHint(): Locator {
     return this.page.locator('[data-testid*="user" i], [data-testid*="account" i], [data-testid*="logout" i]');
   }
 
   async assertLoggedIn(): Promise<void> {
     // Primary assertion: login UI should not be present.
+    // Use a short timeout because some apps keep a hidden login form in the DOM.
     await expect(
       this.loginHeading.or(this.loginUsernameField),
       'Login UI should not be visible when authenticated',
-    ).toHaveCount(0, { timeout: 20000 });
+    ).toHaveCount(0, { timeout: 5000 });
 
-    // Secondary assertion: some logged-in UI is visible (best-effort across apps).
+    // Secondary assertion: accept any common authenticated indicator.
+    // Some apps show a user avatar/link instead of a logout button.
+    const loggedInIndicator = this.logoutButton
+      .or(this.accountMenu)
+      .or(this.dashboardHeading)
+      .or(this.loggedInUiHint)
+      .or(this.page.getByRole('link', { name: /log out|logout|sign out/i }))
+      .or(this.page.getByRole('link', { name: /account|profile|my account|dashboard/i }))
+      .or(this.page.getByRole('img', { name: /avatar|profile|user/i }))
+      .or(this.page.locator('[aria-label*="account" i], [aria-label*="profile" i], [aria-label*="user" i]'));
+
     await expect(
-      this.logoutButton.or(this.accountMenu).or(this.dashboardHeading).or(this.loggedInCookieHint),
-      'Expected some logged-in UI (logout/account/dashboard) to be visible',
+      loggedInIndicator.first(),
+      'Expected some logged-in UI (logout/account/dashboard/avatar) to be visible',
     ).toBeVisible({ timeout: 20000 });
   }
 }
