@@ -73,10 +73,11 @@ class SignupPage {
     ];
 
     for (const url of candidates) {
-      // Avoid hanging on slow/blocked routes; continue trying other known signup/auth paths.
       try {
         await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
       } catch {
+        // If navigation fails due to the page/context being closed, stop immediately.
+        if (this.page.isClosed()) throw new Error('Page was closed during navigation attempts.');
         continue;
       }
 
@@ -91,11 +92,9 @@ class SignupPage {
       const email = this.emailTextbox.first();
       const password = this.passwordTextbox.first();
 
-      // Wait a bit for client-side hydration/rendering.
       await email.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
       if (await email.isVisible().catch(() => false)) return;
 
-      // Some apps start with "name" and reveal email/password after.
       const continueBtn = this.page
         .getByRole('button', { name: /continue|next/i })
         .or(this.page.getByRole('button', { name: /get started/i }));
@@ -110,13 +109,20 @@ class SignupPage {
       if (await password.isVisible().catch(() => false)) return;
     }
 
-    // Fallback: at least ensure we're on some auth page and can reach signup.
-    await this.page.goto(`${root}/`, { waitUntil: 'domcontentloaded' });
+    // If none of the direct auth routes worked, fall back to the home page.
+    // Use a bounded timeout to avoid consuming the whole test timeout.
+    await this.page.goto(`${root}/`, { waitUntil: 'domcontentloaded', timeout: 15000 });
     const openSignupCta = this.page
       .getByRole('link', { name: /sign up|sign-up|signup|create account|register/i })
       .or(this.page.getByRole('button', { name: /sign up|sign-up|signup|create account|register/i }));
     if ((await openSignupCta.count().catch(() => 0)) > 0) {
-      await openSignupCta.first().click();
+      await openSignupCta.first().click({ timeout: 15000 });
+    }
+
+    // If signup is a separate route, try to navigate there from home as well.
+    if (!(await this.emailTextbox.first().isVisible().catch(() => false))) {
+      const signupLink = this.page.getByRole('link', { name: /sign up|sign-up|signup|create account|register/i });
+      if ((await signupLink.count().catch(() => 0)) > 0) await signupLink.first().click({ timeout: 15000 });
     }
 
     await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
@@ -174,10 +180,7 @@ test.describe('AT-TC-28 - Reject signup with an existing email and show duplicat
     await signupPage.fillNameIfPresent('Existing User');
 
     // Use a non-secret password from env when available; otherwise a deterministic placeholder.
-    const password =
-      process.env.TEST_PASSWORD ??
-      process.env.APP_PASSWORD ??
-      'ValidPassword123!';
+    const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD ?? 'ValidPassword123!';
     await signupPage.fillPassword(password);
     await signupPage.submit();
 
