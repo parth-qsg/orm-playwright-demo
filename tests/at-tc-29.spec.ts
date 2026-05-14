@@ -53,7 +53,13 @@ class AuthenticatedApp {
     } else {
       for (const p of loginPaths) {
         await this.page.goto(`${root}${p}`, { waitUntil: 'domcontentloaded' });
-        if ((await this.page.getByRole('heading', { name: /log in|login|sign in/i }).count().catch(() => 0)) > 0) break;
+        if (
+          (await this.page
+            .getByRole('heading', { name: /log in|login|sign in/i })
+            .count()
+            .catch(() => 0)) > 0
+        )
+          break;
       }
     }
 
@@ -69,7 +75,11 @@ class AuthenticatedApp {
     const passwordField = this.page
       .getByLabel(/password/i)
       .or(this.page.getByPlaceholder(/password/i))
-      .or(this.page.locator('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]'));
+      .or(
+        this.page.locator(
+          'input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]',
+        ),
+      );
 
     const frames = this.page.frames();
     const frameWithIdentifier = frames.find((f) => f !== this.page.mainFrame());
@@ -87,7 +97,11 @@ class AuthenticatedApp {
       const pwInFrame = frameWithIdentifier
         .getByLabel(/password/i)
         .or(frameWithIdentifier.getByPlaceholder(/password/i))
-        .or(frameWithIdentifier.locator('input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]'));
+        .or(
+          frameWithIdentifier.locator(
+            'input[type="password"], input[autocomplete="current-password"], input[autocomplete="new-password"]',
+          ),
+        );
 
       await expect(idInFrame.first()).toBeVisible({ timeout: 15000 });
       await idInFrame.first().fill(username);
