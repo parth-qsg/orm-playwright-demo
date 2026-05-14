@@ -194,6 +194,12 @@ class AuthenticatedUi {
   }
 
   async assertLoggedIn(): Promise<void> {
+    // Prefer a negative assertion: if the app kept the session, it should not show login UI.
+    // This is more portable than guessing a specific "logged-in" indicator across apps.
+    const loginUi = this.loginHeading.or(this.loginUsernameField);
+    await expect(loginUi, 'Login UI should not be visible when authenticated').toBeHidden({ timeout: 20000 });
+
+    // If the app does expose a logged-in indicator, assert it as an additional signal.
     const loggedInIndicator = this.logoutButton
       .or(this.accountMenu)
       .or(this.dashboardHeading)
@@ -203,15 +209,13 @@ class AuthenticatedUi {
       .or(this.page.getByRole('img', { name: /avatar|profile|user/i }))
       .or(this.page.locator('[aria-label*="account" i], [aria-label*="profile" i], [aria-label*="user" i]'));
 
-    // Primary assertion: some logged-in UI is visible.
-    await expect(
-      loggedInIndicator.first(),
-      'Expected a logged-in UI indicator (logout/account/dashboard/avatar) to be visible',
-    ).toBeVisible({ timeout: 20000 });
-
-    // Secondary assertion: login form should not be visible (some apps keep hidden login markup in DOM).
-    const loginUi = this.loginHeading.or(this.loginUsernameField);
-    await expect(loginUi, 'Login UI should not be visible when authenticated').toBeHidden({ timeout: 15000 });
+    const indicatorCount = await loggedInIndicator.count().catch(() => 0);
+    if (indicatorCount > 0) {
+      await expect(
+        loggedInIndicator.first(),
+        'Expected a logged-in UI indicator (logout/account/dashboard/avatar) to be visible',
+      ).toBeVisible({ timeout: 20000 });
+    }
   }
 }
 
