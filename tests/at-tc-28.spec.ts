@@ -73,7 +73,12 @@ class SignupPage {
     ];
 
     for (const url of candidates) {
-      await this.page.goto(url, { waitUntil: 'domcontentloaded' });
+      // Avoid hanging on slow/blocked routes; continue trying other known signup/auth paths.
+      try {
+        await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      } catch {
+        continue;
+      }
 
       // Some apps render signup inside a modal opened from a CTA.
       const openSignupCta = this.page
@@ -167,8 +172,13 @@ test.describe('AT-TC-28 - Reject signup with an existing email and show duplicat
     // Act
     await signupPage.fillEmail('existing@example.com');
     await signupPage.fillNameIfPresent('Existing User');
-    // Non-secret placeholder password; this test asserts server-side duplicate email rejection.
-    await signupPage.fillPassword('ValidPassword123!');
+
+    // Use a non-secret password from env when available; otherwise a deterministic placeholder.
+    const password =
+      process.env.TEST_PASSWORD ??
+      process.env.APP_PASSWORD ??
+      'ValidPassword123!';
+    await signupPage.fillPassword(password);
     await signupPage.submit();
 
     // Assert
