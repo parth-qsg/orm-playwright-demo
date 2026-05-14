@@ -67,7 +67,6 @@ class SignupPage {
   }
 
   private get signupButton(): Locator {
-    // Support apps that label the submit button as "Sign up", "Create account", or simply "Submit".
     return this.page
       .getByRole('button', { name: /sign up|signup|register|create account|create|submit|continue/i })
       .or(this.page.locator('button[type="submit"], input[type="submit"]'));
@@ -92,8 +91,6 @@ class SignupPage {
       if (response && response.status() !== 404) break;
     }
 
-    // Some apps serve signup as a modal/route from the home page.
-    // If direct routes didn't land on a signup UI, fall back to base URL.
     const onSignup = await this.isOnSignupUi();
     if (!onSignup) {
       await this.page.goto(base, { waitUntil: 'domcontentloaded' });
@@ -150,7 +147,6 @@ class SignupPage {
   }
 
   async submit(): Promise<void> {
-    // Prefer clicking an explicit signup button, but fall back to submitting the form.
     const button = this.signupButton;
     if (await button.isVisible().catch(() => false)) {
       await expect(button).toBeEnabled();
@@ -185,9 +181,26 @@ class AuthenticatedUi {
       .or(this.page.getByRole('link', { name: /log in|login|sign in/i }));
   }
 
+  private get loginUsernameField(): Locator {
+    return this.page
+      .getByRole('textbox', { name: /username|email/i })
+      .or(this.page.getByLabel(/username|email/i))
+      .or(this.page.locator('input[name="username"], input[name="email"], input[type="email"], input[autocomplete="username"], input[autocomplete="email"]'));
+  }
+
   async assertLoggedIn(): Promise<void> {
-    await expect(this.logoutButton.or(this.accountMenu).or(this.dashboardHeading)).toBeVisible({ timeout: 20000 });
-    await expect(this.loginButtonOrLink).toBeHidden();
+    // If we got redirected to a login page, fail with a clear assertion.
+    await expect(this.page, 'Should not be on login page after signup/refresh').not.toHaveURL(/\/auth\/login|\/login/i, {
+      timeout: 20000,
+    });
+
+    await expect(
+      this.logoutButton.or(this.accountMenu).or(this.dashboardHeading),
+      'Expected some logged-in UI (logout/account/dashboard) to be visible',
+    ).toBeVisible({ timeout: 20000 });
+
+    // Some apps keep a login link in header even when authenticated; only assert that the login form is not present.
+    await expect(this.loginUsernameField, 'Login form should not be visible when authenticated').toHaveCount(0);
   }
 }
 
