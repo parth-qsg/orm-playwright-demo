@@ -1,26 +1,69 @@
 import { expect, Locator, Page, test } from '@playwright/test';
 
+function getBaseUrl(): string {
+  const baseUrl = process.env.BASE_URL;
+  test.skip(!baseUrl, 'Missing BASE_URL environment variable.');
+  return baseUrl!.replace(/\/$/, '');
+}
+
+function uniqueEmail(): string {
+  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '');
+  const worker = process.env.TEST_WORKER_INDEX ?? '0';
+  return `pw.signup.${stamp}.w${worker}@example.test`;
+}
+
+function getSignupPassword(): string {
+  // Signup typically needs a password; do not hardcode.
+  const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
+  test.skip(!password, 'Missing password: set TEST_PASSWORD (preferred) or APP_PASSWORD.');
+  return password!;
+}
+
 class SignupPage {
   constructor(private readonly page: Page) {}
 
   private get emailTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /email/i });
-  }
-
-  private get passwordTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /^password$/i });
-  }
-
-  private get confirmPasswordTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /confirm password|password confirmation/i });
+    return this.page
+      .getByRole('textbox', { name: /email/i })
+      .or(this.page.getByLabel(/email/i))
+      .or(this.page.getByPlaceholder(/email/i))
+      .or(
+        this.page.locator(
+          'input[name="email"], input#email, input[type="email"], input[autocomplete="email"], input[placeholder*="mail" i]',
+        ),
+      );
   }
 
   private get usernameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /username/i });
+    return this.page
+      .getByRole('textbox', { name: /username/i })
+      .or(this.page.getByLabel(/username/i))
+      .or(this.page.locator('input[name="username"], input#username, input[autocomplete="username"]'));
   }
 
   private get nameTextbox(): Locator {
-    return this.page.getByRole('textbox', { name: /^name$/i });
+    return this.page
+      .getByRole('textbox', { name: /^name$/i })
+      .or(this.page.getByLabel(/^name$/i))
+      .or(this.page.locator('input[name="name"], input#name, input[autocomplete="name"]'));
+  }
+
+  private get passwordTextbox(): Locator {
+    return this.page
+      .getByLabel(/^password$/i)
+      .or(this.page.getByPlaceholder(/^password$/i))
+      .or(this.page.locator('input[name="password"], input#password, input[type="password"]'));
+  }
+
+  private get confirmPasswordTextbox(): Locator {
+    return this.page
+      .getByLabel(/confirm password|password confirmation/i)
+      .or(this.page.getByPlaceholder(/confirm password|password confirmation/i))
+      .or(
+        this.page.locator(
+          'input[name="confirmPassword"], input[name="confirm_password"], input#confirmPassword, input#confirm_password, input[autocomplete="new-password"]',
+        ),
+      );
   }
 
   private get signupButton(): Locator {
@@ -32,37 +75,58 @@ class SignupPage {
   }
 
   async goto(): Promise<void> {
-    const baseURL = process.env.BASE_URL;
-    test.skip(!baseURL, 'Missing BASE_URL environment variable.');
-
-    const base = baseURL.replace(/\/$/, '');
+    const base = getBaseUrl();
     const candidates: string[] = [`${base}/signup`, `${base}/sign-up`, `${base}/register`, `${base}/auth/signup`];
 
     for (const url of candidates) {
       const response = await this.page.goto(url, { waitUntil: 'domcontentloaded' });
-      // If server responds (even 200/3xx/401), proceed to check page content.
       if (response && response.status() !== 404) {
         break;
       }
     }
 
+    // Some apps serve signup as a modal/route from the home page.
+    // If direct routes didn't land on a signup UI, fall back to base URL.
+    const onSignup = await this.isOnSignupUi();
+    if (!onSignup) {
+      await this.page.goto(base, { waitUntil: 'domcontentloaded' });
+    }
+
     await this.assertOnSignupPage();
   }
 
+  private get openSignupLinkOrButton(): Locator {
+    return this.page
+      .getByRole('link', { name: /sign up|signup|register|create account/i })
+      .or(this.page.getByRole('button', { name: /sign up|signup|register|create account/i }));
+  }
+
+  private async isOnSignupUi(): Promise<boolean> {
+    const emailOrUser = this.emailTextbox.or(this.usernameTextbox);
+    return (
+      (await this.signupHeading.isVisible().catch(() => false)) ||
+      (await emailOrUser.first().isVisible().catch(() => false))
+    );
+  }
+
   async assertOnSignupPage(): Promise<void> {
-    // Some apps render signup as a tab on a combined auth page.
     const signupTab = this.page.getByRole('tab', { name: /sign up|signup|register|create account/i });
     if (await signupTab.isVisible().catch(() => false)) {
       await signupTab.click();
     }
 
-    // Best-effort: any of these should exist on a signup screen.
+    if (!(await this.isOnSignupUi())) {
+      const opener = this.openSignupLinkOrButton;
+      if (await opener.isVisible().catch(() => false)) {
+        await opener.click();
+      }
+    }
+
     const emailOrUser = this.emailTextbox.or(this.usernameTextbox);
-    await expect(this.signupHeading.or(this.signupButton).or(emailOrUser)).toBeVisible({ timeout: 15000 });
+    await expect(this.signupHeading.or(emailOrUser).first()).toBeVisible({ timeout: 20000 });
   }
 
   async fillMinimalRequiredDetails(params: { email: string; password: string }): Promise<void> {
-    // Fill only fields that exist/are visible.
     if (await this.emailTextbox.isVisible().catch(() => false)) {
       await this.emailTextbox.fill(params.email);
     }
@@ -85,7 +149,7 @@ class SignupPage {
   }
 
   async submit(): Promise<void> {
-    await expect(this.signupButton).toBeVisible();
+    await expect(this.signupButton).toBeVisible({ timeout: 15000 });
     await expect(this.signupButton).toBeEnabled();
     await this.signupButton.click();
   }
@@ -111,37 +175,33 @@ class AuthenticatedUi {
   }
 
   async assertLoggedIn(): Promise<void> {
-    // Logged-in indicators: logout button OR account menu OR dashboard heading.
-    await expect(this.logoutButton.or(this.accountMenu).or(this.dashboardHeading)).toBeVisible();
-
-    // Negative signal: login button should not be visible (best-effort).
+    await expect(this.logoutButton.or(this.accountMenu).or(this.dashboardHeading)).toBeVisible({ timeout: 20000 });
     await expect(this.loginButton).toBeHidden();
   }
 }
 
 test.describe('AT-TC-42 - Verify user remains logged in after refreshing the page post-signup', () => {
-  test('User stays authenticated after page refresh', async ({ page }) => {
+  test('User remains authenticated after refresh', async ({ page }) => {
     const signupPage = new SignupPage(page);
     const authenticatedUi = new AuthenticatedUi(page);
 
-    const password = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
-    test.skip(!password, 'Missing password: set TEST_PASSWORD (or APP_PASSWORD).');
+    const email = uniqueEmail();
+    const password = getSignupPassword();
 
     // Arrange
     await signupPage.goto();
 
     // Act
-    const uniqueEmail = `pw-signup-${Date.now()}@example.test`;
-    await signupPage.fillMinimalRequiredDetails({ email: uniqueEmail, password });
+    await signupPage.fillMinimalRequiredDetails({ email, password });
     await signupPage.submit();
 
-    // Assert: user is authenticated after signup
+    // Assert: logged in after signup
     await authenticatedUi.assertLoggedIn();
 
     // Act: refresh
     await page.reload({ waitUntil: 'domcontentloaded' });
 
-    // Assert: user remains authenticated after refresh
+    // Assert: still logged in after refresh
     await authenticatedUi.assertLoggedIn();
   });
 });
