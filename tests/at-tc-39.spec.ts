@@ -135,6 +135,7 @@ class SignupPage {
     // Prefer native HTML5 validation if present.
     const nativeMessage = await password.evaluate((el) => {
       const input = el as HTMLInputElement;
+      if (typeof input.reportValidity === 'function') input.reportValidity();
       return input.validationMessage ?? '';
     });
 
@@ -144,18 +145,48 @@ class SignupPage {
     }
 
     // Otherwise, assert the field is marked invalid OR an inline validation message is shown.
-    // Some UIs only show a generic "Required" near the field.
     const invalidByAria = await password.getAttribute('aria-invalid');
     if (invalidByAria !== null) {
       expect(invalidByAria).toBe('true');
       return;
     }
 
-    const inlineError = this.page
-      .locator('[role="alert"], [aria-live], .error, .errors, .invalid-feedback, .field-error, .helper-text, .form-error')
+    // Some apps only add a CSS class to the input itself.
+    await expect(password).toHaveClass(/invalid|error/i, { timeout: 15000 });
+
+    const describedBy = await password.getAttribute('aria-describedby');
+    if (describedBy) {
+      const described = this.page.locator(
+        describedBy
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((id) => `#${CSS.escape(id)}`)
+          .join(', '),
+      );
+      await expect(described).toContainText(/password|required|missing/i, { timeout: 15000 });
+      return;
+    }
+
+    // Fallback: look for any visible validation text near the password field.
+    const fieldContainer = password.locator(
+      'xpath=ancestor::*[self::label or self::div or self::fieldset][1]',
+    );
+    const nearbyText = fieldContainer
+      .locator(
+        '[role="alert"], [aria-live], [data-testid*="error" i], [data-test*="error" i], .error, .errors, .invalid-feedback, .field-error, .helper-text, .form-error, .input-error, .text-danger, .MuiFormHelperText-root, .Mui-error',
+      )
       .filter({ hasText: /password|required|missing/i });
 
-    await expect(inlineError.first()).toBeVisible({ timeout: 15000 });
+    if (await nearbyText.first().isVisible().catch(() => false)) {
+      await expect(nearbyText.first()).toBeVisible({ timeout: 15000 });
+      return;
+    }
+
+    // Last resort: accept generic required message anywhere on the form.
+    const genericRequired = this.page
+      .locator('[role="alert"], [aria-live], .invalid-feedback, .field-error, .form-error')
+      .filter({ hasText: /required|missing/i });
+    await expect(genericRequired.first()).toBeVisible({ timeout: 15000 });
   }
 }
 
