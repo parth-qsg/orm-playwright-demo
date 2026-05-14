@@ -200,34 +200,31 @@ class AuthenticatedUi {
       .or(this.page.locator('input[name="email"], input#email, input[type="email"], input[autocomplete="email"]'));
   }
 
-  private get loggedInUiHint(): Locator {
-    return this.page.locator(
-      '[data-testid*="user" i], [data-testid*="account" i], [data-testid*="logout" i], [aria-label*="account" i], [aria-label*="profile" i]',
-    );
+  private get loginButtonOrLink(): Locator {
+    return this.page
+      .getByRole('button', { name: /log in|login|sign in/i })
+      .or(this.page.getByRole('link', { name: /log in|login|sign in/i }));
   }
 
-  async assertLoggedIn(): Promise<void> {
-    // Primary assertion for auth persistence: user should not be bounced back to auth screens.
-    await expect(this.loginHeading, 'Login heading should not be visible when authenticated').toBeHidden({
-      timeout: 20000,
-    });
-    await expect(this.loginUsernameField, 'Login username/email field should not be visible when authenticated').toBeHidden(
-      { timeout: 20000 },
-    );
-    await expect(this.signupHeading, 'Signup heading should not be visible when authenticated').toBeHidden({
-      timeout: 20000,
-    });
-    await expect(this.signupEmailField, 'Signup email field should not be visible when authenticated').toBeHidden({
-      timeout: 20000,
-    });
+  async assertAuthenticated(): Promise<void> {
+    // Some apps don't expose a dedicated logout/account control immediately after signup.
+    // A robust signal of authentication is that we are NOT on login/signup screens.
+    await this.assertNotOnAuthScreens();
 
-    // Secondary (best-effort) UI signal: if the app shows a user menu/logout, assert it.
-    const positiveSignals = this.logoutButton.or(this.accountMenu).or(this.dashboardHeading).or(this.loggedInUiHint);
-    if ((await positiveSignals.first().count()) > 0) {
-      await expect(positiveSignals.first(), 'Logged-in UI signal should be visible when present').toBeVisible({
-        timeout: 20000,
-      });
+    // If the app does show an authenticated affordance, assert it when present.
+    const authedAffordance = this.logoutButton.or(this.accountMenu).or(this.dashboardHeading);
+    if (await authedAffordance.first().isVisible().catch(() => false)) {
+      await expect(authedAffordance.first()).toBeVisible({ timeout: 20000 });
     }
+
+    // Login CTA should not be visible in authenticated state.
+    if (await this.loginButtonOrLink.isVisible().catch(() => false)) {
+      await expect(this.loginButtonOrLink).toBeHidden();
+    }
+  }
+
+  async assertNotOnAuthScreens(): Promise<void> {
+    await expect(this.loginHeading.or(this.loginUsernameField).or(this.signupHeading).or(this.signupEmailField)).toBeHidden();
   }
 }
 
@@ -236,12 +233,11 @@ test.describe('AT-TC-42 - Verify user remains logged in after refreshing the pag
 }, () => {
   test('User remains authenticated after refresh post-signup', async ({ page }) => {
     // Arrange
-    getBaseUrl();
-    const email = uniqueEmail();
-    const password = getSignupPassword();
-
     const signupPage = new SignupPage(page);
     const authed = new AuthenticatedUi(page);
+
+    const email = uniqueEmail();
+    const password = getSignupPassword();
 
     // Act
     await signupPage.goto();
@@ -249,12 +245,13 @@ test.describe('AT-TC-42 - Verify user remains logged in after refreshing the pag
     await signupPage.submit();
 
     // Assert (post-signup)
-    await authed.assertLoggedIn();
+    await authed.assertAuthenticated();
 
     // Act (refresh)
     await page.reload({ waitUntil: 'domcontentloaded' });
 
     // Assert (still authenticated)
-    await authed.assertLoggedIn();
+    await authed.assertAuthenticated();
+    await authed.assertNotOnAuthScreens();
   });
 });

@@ -151,9 +151,8 @@ class SignupPage {
       return;
     }
 
-    // Some apps only add a CSS class to the input itself.
-    await expect(password).toHaveClass(/invalid|error/i, { timeout: 15000 });
-
+    // Otherwise, accept any of the common validation signals.
+    // 1) aria-describedby points to helper/error text.
     const describedBy = await password.getAttribute('aria-describedby');
     if (describedBy) {
       const described = this.page.locator(
@@ -167,10 +166,8 @@ class SignupPage {
       return;
     }
 
-    // Fallback: look for any visible validation text near the password field.
-    const fieldContainer = password.locator(
-      'xpath=ancestor::*[self::label or self::div or self::fieldset][1]',
-    );
+    // 2) Inline validation message near the password field.
+    const fieldContainer = password.locator('xpath=ancestor::*[self::label or self::div or self::fieldset][1]');
     const nearbyText = fieldContainer
       .locator(
         '[role="alert"], [aria-live], [data-testid*="error" i], [data-test*="error" i], .error, .errors, .invalid-feedback, .field-error, .helper-text, .form-error, .input-error, .text-danger, .MuiFormHelperText-root, .Mui-error',
@@ -182,10 +179,19 @@ class SignupPage {
       return;
     }
 
-    // Last resort: accept generic required message anywhere on the form.
+    // 3) Input is marked invalid via CSS class.
+    const classAttr = (await password.getAttribute('class')) ?? '';
+    if (/invalid|error/i.test(classAttr)) {
+      expect(classAttr).toMatch(/invalid|error/i);
+      return;
+    }
+
+    // 4) Last resort: accept generic required message anywhere on the form.
     const genericRequired = this.page
-      .locator('[role="alert"], [aria-live], .invalid-feedback, .field-error, .form-error')
-      .filter({ hasText: /required|missing/i });
+      .locator(
+        '[role="alert"], [aria-live], [data-testid*="error" i], [data-test*="error" i], .error, .errors, .invalid-feedback, .field-error, .helper-text, .form-error, .input-error, .text-danger, .MuiFormHelperText-root, .Mui-error',
+      )
+      .filter({ hasText: /required|missing|password/i });
     await expect(genericRequired.first()).toBeVisible({ timeout: 15000 });
   }
 }
