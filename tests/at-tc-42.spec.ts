@@ -67,11 +67,20 @@ class SignupPage {
   }
 
   private get signupButton(): Locator {
-    return this.page.getByRole('button', { name: /sign up|signup|register|create account/i });
+    // Support apps that label the submit button as "Sign up", "Create account", or simply "Submit".
+    return this.page
+      .getByRole('button', { name: /sign up|signup|register|create account|create|submit|continue/i })
+      .or(this.page.locator('button[type="submit"], input[type="submit"]'));
   }
 
   private get signupHeading(): Locator {
     return this.page.getByRole('heading', { name: /sign up|create account|register/i });
+  }
+
+  private get openSignupLinkOrButton(): Locator {
+    return this.page
+      .getByRole('link', { name: /sign up|signup|register|create account/i })
+      .or(this.page.getByRole('button', { name: /sign up|signup|register|create account/i }));
   }
 
   async goto(): Promise<void> {
@@ -80,9 +89,7 @@ class SignupPage {
 
     for (const url of candidates) {
       const response = await this.page.goto(url, { waitUntil: 'domcontentloaded' });
-      if (response && response.status() !== 404) {
-        break;
-      }
+      if (response && response.status() !== 404) break;
     }
 
     // Some apps serve signup as a modal/route from the home page.
@@ -93,12 +100,6 @@ class SignupPage {
     }
 
     await this.assertOnSignupPage();
-  }
-
-  private get openSignupLinkOrButton(): Locator {
-    return this.page
-      .getByRole('link', { name: /sign up|signup|register|create account/i })
-      .or(this.page.getByRole('button', { name: /sign up|signup|register|create account/i }));
   }
 
   private async isOnSignupUi(): Promise<boolean> {
@@ -149,9 +150,17 @@ class SignupPage {
   }
 
   async submit(): Promise<void> {
-    await expect(this.signupButton).toBeVisible({ timeout: 15000 });
-    await expect(this.signupButton).toBeEnabled();
-    await this.signupButton.click();
+    // Prefer clicking an explicit signup button, but fall back to submitting the form.
+    const button = this.signupButton;
+    if (await button.isVisible().catch(() => false)) {
+      await expect(button).toBeEnabled();
+      await button.click();
+      return;
+    }
+
+    const form = this.page.locator('form');
+    await expect(form.first()).toBeVisible({ timeout: 15000 });
+    await form.first().evaluate((f) => (f as HTMLFormElement).requestSubmit());
   }
 }
 
@@ -170,17 +179,21 @@ class AuthenticatedUi {
     return this.page.getByRole('heading', { name: /dashboard|home|my account|profile/i });
   }
 
-  private get loginButton(): Locator {
-    return this.page.getByRole('button', { name: /log in|login|sign in/i });
+  private get loginButtonOrLink(): Locator {
+    return this.page
+      .getByRole('button', { name: /log in|login|sign in/i })
+      .or(this.page.getByRole('link', { name: /log in|login|sign in/i }));
   }
 
   async assertLoggedIn(): Promise<void> {
     await expect(this.logoutButton.or(this.accountMenu).or(this.dashboardHeading)).toBeVisible({ timeout: 20000 });
-    await expect(this.loginButton).toBeHidden();
+    await expect(this.loginButtonOrLink).toBeHidden();
   }
 }
 
-test.describe('AT-TC-42 - Verify user remains logged in after refreshing the page post-signup', () => {
+test.describe('AT-TC-42 - Verify user remains logged in after refreshing the page post-signup', {
+  tag: ['@functional', '@regression'],
+}, () => {
   test('User remains authenticated after refresh', async ({ page }) => {
     const signupPage = new SignupPage(page);
     const authenticatedUi = new AuthenticatedUi(page);

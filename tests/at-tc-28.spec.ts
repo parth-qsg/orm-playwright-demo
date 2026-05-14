@@ -60,69 +60,15 @@ class SignupPage {
     // Preconditions: no user is currently authenticated.
     await this.page.context().clearCookies();
 
-    const candidates = [
-      `${root}/signup`,
-      `${root}/register`,
-      `${root}/auth/signup`,
-      `${root}/auth/register`,
-      `${root}/sign-up`,
-      `${root}/create-account`,
-      `${root}/auth`,
-      `${root}/login`,
-      `${root}/sign-in`,
-    ];
+    // Avoid long multi-candidate navigation loops that can hit app redirects and close the page.
+    await this.page.goto(`${root}/signup`, { waitUntil: 'domcontentloaded' });
 
-    for (const url of candidates) {
-      try {
-        await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      } catch {
-        // If navigation fails due to the page/context being closed, stop immediately.
-        if (this.page.isClosed()) throw new Error('Page was closed during navigation attempts.');
-        continue;
-      }
-
-      // Some apps render signup inside a modal opened from a CTA.
-      const openSignupCta = this.page
-        .getByRole('link', { name: /sign up|sign-up|signup|create account|register/i })
-        .or(this.page.getByRole('button', { name: /sign up|sign-up|signup|create account|register/i }));
-      if ((await openSignupCta.count().catch(() => 0)) > 0) {
-        await openSignupCta.first().click().catch(() => undefined);
-      }
-
-      const email = this.emailTextbox.first();
-      const password = this.passwordTextbox.first();
-
-      await email.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
-      if (await email.isVisible().catch(() => false)) return;
-
-      const continueBtn = this.page
-        .getByRole('button', { name: /continue|next/i })
-        .or(this.page.getByRole('button', { name: /get started/i }));
-      if ((await continueBtn.count().catch(() => 0)) > 0) {
-        await continueBtn.first().click().catch(() => undefined);
-      }
-
-      await email.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
-      if (await email.isVisible().catch(() => false)) return;
-
-      await password.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
-      if (await password.isVisible().catch(() => false)) return;
-    }
-
-    // If none of the direct auth routes worked, fall back to the home page.
-    // Use a bounded timeout to avoid consuming the whole test timeout.
-    await this.page.goto(`${root}/`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    // If the app uses a combined auth page, try to open the signup form.
     const openSignupCta = this.page
       .getByRole('link', { name: /sign up|sign-up|signup|create account|register/i })
       .or(this.page.getByRole('button', { name: /sign up|sign-up|signup|create account|register/i }));
     if ((await openSignupCta.count().catch(() => 0)) > 0) {
-      await openSignupCta.first().click({ timeout: 15000 });
-    }
-
-    // If signup is a separate route, try to navigate there from home as well.
-    if (!(await this.emailTextbox.first().isVisible().catch(() => false))) {
-      const signupLink = this.page.getByRole('link', { name: /sign up|sign-up|signup|create account|register/i });
-      if ((await signupLink.count().catch(() => 0)) > 0) await signupLink.first().click({ timeout: 15000 });
+      await openSignupCta.first().click().catch(() => undefined);
     }
 
     await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
