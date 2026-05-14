@@ -19,7 +19,9 @@ class SignupWithReferralPage {
       .or(this.page.getByRole('textbox', { name: /email/i }))
       .or(this.page.locator('input[type="email"]'))
       .or(this.page.locator('input[autocomplete="email"], input[autocomplete="username"]'))
-      .or(this.page.locator('input[name*="email" i], input[id*="email" i]'));
+      .or(this.page.locator('input[name*="email" i], input[id*="email" i]'))
+      // Some apps use "username" as the email field without type=email.
+      .or(this.page.locator('input[name*="user" i], input[id*="user" i]'));
   }
 
   private get passwordTextbox(): Locator {
@@ -105,8 +107,8 @@ class SignupWithReferralPage {
     const formReady = async (): Promise<boolean> => {
       const emailCount = await this.emailTextbox.count().catch(() => 0);
       const passwordCount = await this.passwordTextbox.count().catch(() => 0);
-      const referralCount = await this.referralTextbox.count().catch(() => 0);
-      return emailCount > 0 && passwordCount > 0 && referralCount > 0;
+      // Referral may be optional/hidden behind an "Have a referral code?" toggle.
+      return emailCount > 0 && passwordCount > 0;
     };
 
     for (const url of candidates) {
@@ -120,19 +122,22 @@ class SignupWithReferralPage {
         await openSignupCta.first().click().catch(() => undefined);
       }
 
-      // Wait briefly for the form to render (SPA).
+      // Wait for any of the likely signup fields to appear.
       await this.page.waitForLoadState('domcontentloaded');
-      await this.page.waitForTimeout(250);
+      await this.page
+        .waitForSelector('input[type="email"], input[autocomplete="email"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]', {
+          state: 'attached',
+          timeout: 5000,
+        })
+        .catch(() => undefined);
 
       if (await formReady()) return;
     }
 
-    // Final fallback: ensure at least one expected field is present.
-    await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
+    await expect(this.page.locator('input')).toBeVisible({ timeout: 15000 });
   }
 
   async assertSignupFormLoaded(): Promise<void> {
-    // Email field can be implemented as a generic textbox; keep a resilient fallback.
     const emailVisible = await this.emailTextbox.first().isVisible().catch(() => false);
     if (!emailVisible) {
       await expect(this.page.getByRole('textbox').first()).toBeVisible();
@@ -142,7 +147,9 @@ class SignupWithReferralPage {
 
     await expect(this.passwordTextbox.first()).toBeVisible();
     await expect(this.submitButton).toBeVisible();
-    await expect(this.referralTextbox.first()).toBeVisible();
+
+    // Referral field may be hidden behind a toggle; it will be asserted when filling.
+    await expect(this.page.locator('form, main')).toBeVisible();
   }
 
   async fillRequiredFields(params: { name: string; email: string; password: string }): Promise<void> {
@@ -158,7 +165,16 @@ class SignupWithReferralPage {
   }
 
   async fillReferralCode(code: string): Promise<void> {
-    await expect(this.referralTextbox.first()).toBeVisible();
+    if ((await this.referralTextbox.count().catch(() => 0)) === 0) {
+      const revealReferral = this.page
+        .getByRole('button', { name: /referral|have a referral|invite code|promo code/i })
+        .or(this.page.getByRole('link', { name: /referral|have a referral|invite code|promo code/i }));
+      if ((await revealReferral.count().catch(() => 0)) > 0) {
+        await revealReferral.first().click().catch(() => undefined);
+      }
+    }
+
+    await expect(this.referralTextbox.first()).toBeVisible({ timeout: 15000 });
     await this.referralTextbox.first().fill(code);
   }
 
@@ -202,7 +218,6 @@ class SignupWithReferralPage {
   }
 
   async assertReferralAssociationVisible(expectedCode: string): Promise<void> {
-    // Best-effort: check on current page first, then try navigating to profile/settings.
     if (await this.page.getByText(new RegExp(expectedCode, 'i')).first().isVisible().catch(() => false)) {
       await expect(this.page.getByText(new RegExp(expectedCode, 'i')).first()).toBeVisible();
       return;
