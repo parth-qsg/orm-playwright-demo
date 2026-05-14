@@ -98,7 +98,16 @@ class SignupWithReferralPage {
       `${root}/auth/register`,
       `${root}/sign-up`,
       `${root}/create-account`,
+      `${root}/auth`,
+      `${root}/login`,
     ];
+
+    const formReady = async (): Promise<boolean> => {
+      const emailCount = await this.emailTextbox.count().catch(() => 0);
+      const passwordCount = await this.passwordTextbox.count().catch(() => 0);
+      const referralCount = await this.referralTextbox.count().catch(() => 0);
+      return emailCount > 0 && passwordCount > 0 && referralCount > 0;
+    };
 
     for (const url of candidates) {
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -112,19 +121,14 @@ class SignupWithReferralPage {
       }
 
       // Wait briefly for the form to render (SPA).
-      if ((await this.emailTextbox.count().catch(() => 0)) > 0) {
-        await this.emailTextbox.first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
-      }
+      await this.page.waitForLoadState('domcontentloaded');
+      await this.page.waitForTimeout(250);
 
-      if (await this.emailTextbox.first().isVisible().catch(() => false)) return;
-
-      // If the app uses "Email address" or similar without type=email, fall back to any textbox.
-      const anyTextbox = this.page.getByRole('textbox').first();
-      if (await anyTextbox.isVisible().catch(() => false)) return;
+      if (await formReady()) return;
     }
 
-    // Final fallback: ensure at least one textbox is present on the signup page.
-    await expect(this.page.getByRole('textbox').first()).toBeVisible({ timeout: 15000 });
+    // Final fallback: ensure at least one expected field is present.
+    await expect(this.emailTextbox.first()).toBeVisible({ timeout: 15000 });
   }
 
   async assertSignupFormLoaded(): Promise<void> {
