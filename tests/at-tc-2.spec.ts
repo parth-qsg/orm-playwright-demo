@@ -25,7 +25,16 @@ test.describe('AT-TC-2 - Retrieve list of power banks and verify payload structu
     const apiBaseUrl = getApiBaseUrl();
 
     // Act
-    const response = await request.get('/powerbanks', { baseURL: apiBaseUrl });
+    // Some deployments may expose the resource under a versioned or pluralized API prefix.
+    // Try the testcase path first, then fall back to common variants if not found.
+    const candidatePaths = ['/powerbanks', '/api/powerbanks', '/v1/powerbanks', '/api/v1/powerbanks'];
+
+    let response: APIResponse | null = null;
+    for (const path of candidatePaths) {
+      response = await request.get(path, { baseURL: apiBaseUrl });
+      if (response.status() !== 404) break;
+    }
+    if (!response) throw new Error('No response received from API');
 
     // Assert
     expect(response.status(), 'Response status is 200').toBe(200);

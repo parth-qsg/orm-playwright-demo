@@ -10,54 +10,41 @@ function getApiBaseUrl(): string {
   return baseUrl.replace(/\/$/, '');
 }
 
-async function expectNoContent(response: APIResponse): Promise<void> {
-  const text = await response.text();
-  expect(text, 'No content returned').toBe('');
+async function readBodyTextSafely(response: APIResponse): Promise<string> {
+  try {
+    return await response.text();
+  } catch {
+    return '';
+  }
 }
 
-test.describe(
-  'AT-TC-4 - API - Delete an existing power bank and verify it is removed',
-  { tag: ['@functional'] },
-  () => {
-    test('DELETE /powerbanks/PB123 returns 204 and subsequent GET returns 404', async ({ request }) => {
-      // Arrange
-      const baseUrl = getApiBaseUrl();
-      const powerBankId = 'PB123';
+test.describe('AT-TC-4 - API - Delete an existing power bank and verify it is removed', {
+  tag: ['@functional'],
+}, () => {
+  test('DELETE /powerbanks/{id} returns 204 and subsequent GET returns 404', async ({ request }) => {
+    // Arrange
+    const baseUrl = getApiBaseUrl();
+    const powerBankId = 'PB123';
+    const resourceUrl = `${baseUrl}/powerbanks/${powerBankId}`;
 
-      // Act: DELETE
-      const deleteResponse = await request.delete(`/powerbanks/${powerBankId}`, {
-        baseURL: baseUrl,
-        failOnStatusCode: false,
-      });
+    // Act: delete
+    // Some deployments may not allow DELETE (405). In that case, skip rather than fail
+    // because the endpoint contract cannot be validated in this environment.
+    const deleteResponse = await request.delete(resourceUrl);
 
-      // Assert
-      // Some environments may not allow DELETE on this resource and return 405.
-      // If so, treat it as "already not deletable/removed" and still verify the final business outcome:
-      // the resource cannot be retrieved.
-      const deleteStatus = deleteResponse.status();
-      expect(
-        [204, 404, 405],
-        `Unexpected DELETE status. Expected 204 (deleted), 404 (already missing), or 405 (method not allowed). Received: ${deleteStatus}`,
-      ).toContain(deleteStatus);
+    if (deleteResponse.status() === 405) {
+      test.skip(true, 'DELETE method not allowed (405) for /powerbanks/{id} in this environment');
+    }
 
-      if (deleteStatus === 204) {
-        await expectNoContent(deleteResponse);
-      }
+    // Assert: delete response
+    expect(deleteResponse.status(), 'Response status is 204').toBe(204);
+    const deleteBody = await readBodyTextSafely(deleteResponse);
+    expect(deleteBody, 'No content returned').toBe('');
 
-      // Act: GET after delete
-      const getResponse = await request.get(`/powerbanks/${powerBankId}`, {
-        baseURL: baseUrl,
-        failOnStatusCode: false,
-      });
+    // Act: get after delete
+    const getResponse = await request.get(resourceUrl);
 
-      // Assert
-      // If DELETE is not supported (405), the resource may still exist; in that case, this test cannot
-      // validate deletion. Keep the intent by requiring 404 only when deletion is possible/confirmed.
-      if (deleteStatus === 405) {
-        test.skip(true, 'DELETE /powerbanks/{id} is not allowed in this environment (405).');
-      }
-
-      expect(getResponse.status(), 'GET after delete returns 404').toBe(404);
-    });
-  },
-);
+    // Assert: not found
+    expect(getResponse.status(), 'GET after delete returns 404').toBe(404);
+  });
+});
