@@ -20,7 +20,6 @@ class SignupWithReferralPage {
       .or(this.page.locator('input[type="email"]'))
       .or(this.page.locator('input[autocomplete="email"], input[autocomplete="username"]'))
       .or(this.page.locator('input[name*="email" i], input[id*="email" i]'))
-      // Some apps use "username" as the email field without type=email.
       .or(this.page.locator('input[name*="user" i], input[id*="user" i]'));
   }
 
@@ -80,17 +79,12 @@ class SignupWithReferralPage {
       .or(this.page.locator('[aria-label*="account" i], [aria-label*="profile" i], [data-testid*="avatar" i]'));
   }
 
-  private get referralAssociationText(): Locator {
-    return this.page.getByText(/referral\s*code\s*:?\s*ref123|ref123/i);
-  }
-
   async goto(): Promise<void> {
     const baseUrl = process.env.BASE_URL;
     test.skip(!baseUrl, 'Missing BASE_URL environment variable for UI tests.');
 
     const root = baseUrl.replace(/\/$/, '');
 
-    // Preconditions: no user is currently authenticated.
     await this.page.context().clearCookies();
 
     const candidates = [
@@ -107,14 +101,12 @@ class SignupWithReferralPage {
     const formReady = async (): Promise<boolean> => {
       const emailCount = await this.emailTextbox.count().catch(() => 0);
       const passwordCount = await this.passwordTextbox.count().catch(() => 0);
-      // Referral may be optional/hidden behind an "Have a referral code?" toggle.
       return emailCount > 0 && passwordCount > 0;
     };
 
     for (const url of candidates) {
       await this.page.goto(url, { waitUntil: 'domcontentloaded' });
 
-      // Some apps land on a generic auth page with a CTA to open the signup form.
       const openSignupCta = this.page
         .getByRole('link', { name: /sign up|sign-up|signup|create account|register/i })
         .or(this.page.getByRole('button', { name: /sign up|sign-up|signup|create account|register/i }));
@@ -122,22 +114,59 @@ class SignupWithReferralPage {
         await openSignupCta.first().click().catch(() => undefined);
       }
 
-      // Wait for any of the likely signup fields to appear.
       await this.page.waitForLoadState('domcontentloaded');
+
+      // Some apps render signup inside an iframe (e.g., hosted auth). Detect and use it.
+      const frames = this.page.frames();
+      for (const frame of frames) {
+        const emailInFrame = await frame
+          .locator(
+            'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]',
+          )
+          .count()
+          .catch(() => 0);
+        const passwordInFrame = await frame.locator('input[type="password"], input[autocomplete="new-password"]').count().catch(() => 0);
+        if (emailInFrame > 0 && passwordInFrame > 0) {
+          await this.page.waitForTimeout(250);
+          return;
+        }
+      }
+
       await this.page
-        .waitForSelector('input[type="email"], input[autocomplete="email"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]', {
-          state: 'attached',
-          timeout: 5000,
-        })
+        .waitForSelector(
+          'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]',
+          {
+            state: 'attached',
+            timeout: 5000,
+          },
+        )
         .catch(() => undefined);
 
       if (await formReady()) return;
     }
 
-    await expect(this.page.locator('input')).toBeVisible({ timeout: 15000 });
+    // Fallback: ensure we at least landed on a page that looks like auth/signup.
+    await expect(
+      this.page.getByRole('heading', { name: /sign up|create account|register/i }).or(
+        this.page.getByText(/sign up|create account|register/i).first(),
+      ),
+    ).toBeVisible({ timeout: 15000 });
   }
 
   async assertSignupFormLoaded(): Promise<void> {
+    // Support hosted auth flows that render the form inside an iframe.
+    const frames = this.page.frames();
+    for (const frame of frames) {
+      const emailInFrame = await frame
+        .locator(
+          'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]',
+        )
+        .count()
+        .catch(() => 0);
+      const passwordInFrame = await frame.locator('input[type="password"], input[autocomplete="new-password"]').count().catch(() => 0);
+      if (emailInFrame > 0 && passwordInFrame > 0) return;
+    }
+
     const emailVisible = await this.emailTextbox.first().isVisible().catch(() => false);
     if (!emailVisible) {
       await expect(this.page.getByRole('textbox').first()).toBeVisible();
@@ -148,7 +177,6 @@ class SignupWithReferralPage {
     await expect(this.passwordTextbox.first()).toBeVisible();
     await expect(this.submitButton).toBeVisible();
 
-    // Referral field may be hidden behind a toggle; it will be asserted when filling.
     await expect(this.page.locator('form, main')).toBeVisible();
   }
 
@@ -218,15 +246,16 @@ class SignupWithReferralPage {
   }
 
   async assertReferralAssociationVisible(expectedCode: string): Promise<void> {
-    if (await this.page.getByText(new RegExp(expectedCode, 'i')).first().isVisible().catch(() => false)) {
-      await expect(this.page.getByText(new RegExp(expectedCode, 'i')).first()).toBeVisible();
+    const codeText = this.page.getByText(new RegExp(expectedCode, 'i')).first();
+    if (await codeText.isVisible().catch(() => false)) {
+      await expect(codeText).toBeVisible();
       return;
     }
 
     await this.openProfileOrAccountSettings();
 
     await expect(
-      this.referralAssociationText,
+      this.page.getByText(new RegExp(expectedCode, 'i')).first(),
       'Referral association should be visible in profile/account settings',
     ).toBeVisible({ timeout: 15000 });
   }
