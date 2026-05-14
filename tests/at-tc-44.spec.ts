@@ -81,18 +81,14 @@ class LeftNavProfileMenu {
   constructor(private readonly page: Page) {}
 
   private get profileMenuButton(): Locator {
+    // Prefer explicit "Profile" button in left nav, but fall back to common avatar/account triggers.
     return this.page
       .getByRole('navigation')
-      .getByRole('button', { name: /profile|account|user|me|settings|menu/i })
+      .getByRole('button', { name: /profile|account|avatar|user|me/i })
+      .or(this.page.getByRole('button', { name: /profile|account|avatar|user|me/i }))
+      .or(this.page.getByRole('img', { name: /profile|account|avatar|user|me/i }))
+      .or(this.page.getByLabel(/profile|account|avatar|user|me/i))
       .first();
-  }
-
-  private get menuItems(): Locator {
-    // Support both ARIA menu and list-based popovers.
-    return this.page
-      .getByRole('menuitem')
-      .or(this.page.getByRole('listitem'))
-      .or(this.page.getByRole('button'));
   }
 
   private get logoutItem(): Locator {
@@ -102,13 +98,13 @@ class LeftNavProfileMenu {
   }
 
   async open(): Promise<void> {
+    await expect(this.page.getByRole('navigation')).toBeVisible({ timeout: 15000 });
     await expect(this.profileMenuButton).toBeVisible({ timeout: 15000 });
     await this.profileMenuButton.click();
     await expect(this.logoutItem).toBeVisible({ timeout: 15000 });
   }
 
   async close(): Promise<void> {
-    // Toggle close.
     await expect(this.profileMenuButton).toBeVisible();
     await this.profileMenuButton.click();
     await expect(this.logoutItem).toBeHidden({ timeout: 15000 });
@@ -117,7 +113,6 @@ class LeftNavProfileMenu {
   async assertLogoutVisibleAndBottomItem(): Promise<void> {
     await expect(this.logoutItem).toBeVisible();
 
-    // Determine the last visible item in the opened menu/popover.
     const lastVisibleText = await this.page.evaluate(() => {
       const candidates = Array.from(
         document.querySelectorAll<HTMLElement>(
@@ -128,12 +123,7 @@ class LeftNavProfileMenu {
       const isVisible = (el: HTMLElement): boolean => {
         const style = window.getComputedStyle(el);
         const rect = el.getBoundingClientRect();
-        return (
-          style.visibility !== 'hidden' &&
-          style.display !== 'none' &&
-          rect.width > 0 &&
-          rect.height > 0
-        );
+        return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
       };
 
       const visible = candidates
@@ -145,21 +135,17 @@ class LeftNavProfileMenu {
         }))
         .filter((x) => x.text.length > 0);
 
-      // Sort by vertical position, then horizontal.
       visible.sort((a, b) => (a.top !== b.top ? a.top - b.top : a.left - b.left));
       return visible.length ? visible[visible.length - 1].text : '';
     });
 
-    expect(
-      lastVisibleText,
-      'Logout should be the bottom-most visible item in the opened profile menu',
-    ).toMatch(/log\s*out|logout|sign\s*out/i);
+    expect(lastVisibleText, 'Logout should be the bottom-most visible item in the opened profile menu').toMatch(
+      /log\s*out|logout|sign\s*out/i,
+    );
   }
 }
 
-test.describe('AT-TC-44 - Profile menu shows Logout as bottom item', {
-  tag: ['@functional', '@secure'],
-}, () => {
+test.describe('AT-TC-44 - Profile menu shows Logout as bottom item', { tag: ['@logout'] }, () => {
   test('Logout is visible and positioned as the bottom item when profile menu is opened', async ({ page }) => {
     // Arrange
     getBaseUrl();
