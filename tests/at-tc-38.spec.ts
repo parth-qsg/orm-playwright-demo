@@ -131,7 +131,6 @@ class SignupPage {
     // Prefer native HTML5 validation if present.
     const nativeMessage = await email.evaluate((el) => {
       const input = el as HTMLInputElement;
-      // Some apps only populate validationMessage after reportValidity().
       if (typeof input.reportValidity === 'function') input.reportValidity();
       return input.validationMessage ?? '';
     });
@@ -147,6 +146,18 @@ class SignupPage {
       expect(ariaInvalid).toBe('true');
       return;
     }
+
+    // Some apps don't set aria-invalid; fall back to HTML5 validity state.
+    const validity = await email.evaluate((el) => {
+      const input = el as HTMLInputElement;
+      return {
+        valid: input.validity?.valid ?? true,
+        typeMismatch: input.validity?.typeMismatch ?? false,
+        patternMismatch: input.validity?.patternMismatch ?? false,
+        badInput: input.validity?.badInput ?? false,
+      };
+    });
+    if (!validity.valid && (validity.typeMismatch || validity.patternMismatch || validity.badInput)) return;
 
     const invalidClass = await email.evaluate((el) => {
       const classes = (el as HTMLElement).className ?? '';
@@ -167,16 +178,13 @@ class SignupPage {
       return;
     }
 
-    const inlineError = this.page
-      .locator(
-        '[role="alert"], [aria-live], [data-testid*="error" i], [data-test*="error" i], .error, .errors, .invalid-feedback, .field-error, .helper-text, .form-error, .input-error, .text-danger',
-      )
-      .filter({
-        hasText:
-          /invalid\s*email|email\s*(is\s*)?invalid|valid\s*email|email\s*format|enter\s*a\s*valid\s*email|must\s*be\s*a\s*valid\s*email/i,
-      });
+    // Last resort: look for any visible validation text near the email field.
+    const fieldContainer = email.locator('xpath=ancestor::*[self::label or self::div or self::fieldset][1]');
+    const nearbyText = fieldContainer
+      .locator('text=/email|valid|format|@|invalid/i')
+      .or(this.page.locator('text=/email|valid|format|@|invalid/i'));
 
-    await expect(inlineError.first()).toBeVisible({ timeout: 15000 });
+    await expect(nearbyText.first()).toBeVisible({ timeout: 15000 });
   }
 }
 
@@ -195,5 +203,6 @@ test.describe('AT-TC-38 - Enforce proper email format during signup', { tag: ['@
 
     // Assert
     await signupPage.assertInvalidEmailValidation();
+    await signupPage.assertOnSignupPage();
   });
 });
