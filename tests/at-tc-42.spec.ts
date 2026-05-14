@@ -189,35 +189,44 @@ class AuthenticatedUi {
       );
   }
 
+  private get signupHeading(): Locator {
+    return this.page.getByRole('heading', { name: /sign up|create account|register/i });
+  }
+
+  private get signupEmailField(): Locator {
+    return this.page
+      .getByRole('textbox', { name: /email/i })
+      .or(this.page.getByLabel(/email/i))
+      .or(this.page.locator('input[name="email"], input#email, input[type="email"], input[autocomplete="email"]'));
+  }
+
   private get loggedInUiHint(): Locator {
-    return this.page.locator('[data-testid*="user" i], [data-testid*="account" i], [data-testid*="logout" i]');
+    return this.page.locator(
+      '[data-testid*="user" i], [data-testid*="account" i], [data-testid*="logout" i], [aria-label*="account" i], [aria-label*="profile" i]',
+    );
   }
 
   async assertLoggedIn(): Promise<void> {
-    // Avoid strict-mode violations by asserting each login element independently.
+    // Primary assertion for auth persistence: user should not be bounced back to auth screens.
     await expect(this.loginHeading, 'Login heading should not be visible when authenticated').toBeHidden({
       timeout: 20000,
     });
-    await expect(this.loginUsernameField, 'Login username/email field should not be visible when authenticated').toBeHidden({
+    await expect(this.loginUsernameField, 'Login username/email field should not be visible when authenticated').toBeHidden(
+      { timeout: 20000 },
+    );
+    await expect(this.signupHeading, 'Signup heading should not be visible when authenticated').toBeHidden({
+      timeout: 20000,
+    });
+    await expect(this.signupEmailField, 'Signup email field should not be visible when authenticated').toBeHidden({
       timeout: 20000,
     });
 
-    // If the app exposes a logged-in indicator, assert it as an additional signal.
-    const loggedInIndicator = this.logoutButton
-      .or(this.accountMenu)
-      .or(this.dashboardHeading)
-      .or(this.loggedInUiHint)
-      .or(this.page.getByRole('link', { name: /log out|logout|sign out/i }))
-      .or(this.page.getByRole('link', { name: /account|profile|my account|dashboard/i }))
-      .or(this.page.getByRole('img', { name: /avatar|profile|user/i }))
-      .or(this.page.locator('[aria-label*="account" i], [aria-label*="profile" i], [aria-label*="user" i]'));
-
-    const indicatorCount = await loggedInIndicator.count().catch(() => 0);
-    if (indicatorCount > 0) {
-      await expect(
-        loggedInIndicator.first(),
-        'Expected a logged-in UI indicator (logout/account/dashboard/avatar) to be visible',
-      ).toBeVisible({ timeout: 20000 });
+    // Secondary (best-effort) UI signal: if the app shows a user menu/logout, assert it.
+    const positiveSignals = this.logoutButton.or(this.accountMenu).or(this.dashboardHeading).or(this.loggedInUiHint);
+    if ((await positiveSignals.first().count()) > 0) {
+      await expect(positiveSignals.first(), 'Logged-in UI signal should be visible when present').toBeVisible({
+        timeout: 20000,
+      });
     }
   }
 }
@@ -225,26 +234,27 @@ class AuthenticatedUi {
 test.describe('AT-TC-42 - Verify user remains logged in after refreshing the page post-signup', {
   tag: ['@functional', '@regression'],
 }, () => {
-  test('User remains authenticated after refresh', async ({ page }) => {
-    const signupPage = new SignupPage(page);
-    const authenticatedUi = new AuthenticatedUi(page);
-
+  test('User remains authenticated after refresh post-signup', async ({ page }) => {
     // Arrange
-    await signupPage.goto();
-
-    // Act
+    getBaseUrl();
     const email = uniqueEmail();
     const password = getSignupPassword();
+
+    const signupPage = new SignupPage(page);
+    const authed = new AuthenticatedUi(page);
+
+    // Act
+    await signupPage.goto();
     await signupPage.fillMinimalRequiredDetails({ email, password });
     await signupPage.submit();
 
-    // Assert: logged in after signup
-    await authenticatedUi.assertLoggedIn();
+    // Assert (post-signup)
+    await authed.assertLoggedIn();
 
-    // Act: refresh
+    // Act (refresh)
     await page.reload({ waitUntil: 'domcontentloaded' });
 
-    // Assert: still logged in after refresh
-    await authenticatedUi.assertLoggedIn();
+    // Assert (still authenticated)
+    await authed.assertLoggedIn();
   });
 });
