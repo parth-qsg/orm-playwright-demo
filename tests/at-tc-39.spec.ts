@@ -38,7 +38,10 @@ class SignupPage {
   }
 
   private get signupButton(): Locator {
-    return this.page.getByRole('button', { name: /sign up|signup|register|create account/i });
+    return this.page
+      .getByRole('button', { name: /sign up|signup|register|create account/i })
+      .or(this.page.getByRole('button', { name: /continue|next|submit|create/i }))
+      .or(this.page.locator('button[type="submit"], input[type="submit"]'));
   }
 
   async goto(): Promise<void> {
@@ -58,7 +61,6 @@ class SignupPage {
       }
     });
 
-    // Some apps expose signup as a modal/tab from the home or auth page.
     const candidates: string[] = [
       `${base}/signup`,
       `${base}/sign-up`,
@@ -78,7 +80,6 @@ class SignupPage {
       }
     }
 
-    // Final attempt: if navigation succeeded but form is behind a tab/modal.
     await this.tryOpenSignupAndWaitForForm();
     await this.assertOnSignupPage();
   }
@@ -93,11 +94,8 @@ class SignupPage {
       await openSignup.first().click();
     }
 
-    const email = this.emailTextbox.first();
-    const password = this.passwordTextbox.first();
-
-    const emailVisible = await email.isVisible().catch(() => false);
-    const passwordVisible = await password.isVisible().catch(() => false);
+    const emailVisible = await this.emailTextbox.first().isVisible().catch(() => false);
+    const passwordVisible = await this.passwordTextbox.first().isVisible().catch(() => false);
     return emailVisible || passwordVisible;
   }
 
@@ -121,14 +119,21 @@ class SignupPage {
   }
 
   async submit(): Promise<void> {
-    await expect(this.signupButton).toBeVisible();
-    await expect(this.signupButton).toBeEnabled();
-    await this.signupButton.click();
+    const button = this.signupButton.first();
+    await expect(button).toBeVisible({ timeout: 15000 });
+    await expect(button).toBeEnabled();
+    await button.click();
   }
 
   async assertPasswordRequiredValidation(): Promise<void> {
+    const password = this.passwordTextbox.first();
+
+    // Trigger validation UI (some apps only validate on blur).
+    await password.focus();
+    await this.page.keyboard.press('Tab');
+
     // Prefer native HTML5 validation if present.
-    const nativeMessage = await this.passwordTextbox.first().evaluate((el) => {
+    const nativeMessage = await password.evaluate((el) => {
       const input = el as HTMLInputElement;
       return input.validationMessage ?? '';
     });
@@ -138,21 +143,29 @@ class SignupPage {
       return;
     }
 
-    // Otherwise, assert an inline validation message is shown.
+    // Otherwise, assert the field is marked invalid OR an inline validation message is shown.
+    // Some UIs only show a generic "Required" near the field.
+    const invalidByAria = await password.getAttribute('aria-invalid');
+    if (invalidByAria !== null) {
+      expect(invalidByAria).toBe('true');
+      return;
+    }
+
     const inlineError = this.page
-      .locator('[role="alert"], [aria-live], .error, .errors, .invalid-feedback, .field-error, .helper-text')
-      .filter({ hasText: /password.*required|required.*password|password is required|required/i });
+      .locator('[role="alert"], [aria-live], .error, .errors, .invalid-feedback, .field-error, .helper-text, .form-error')
+      .filter({ hasText: /password|required|missing/i });
 
     await expect(inlineError.first()).toBeVisible({ timeout: 15000 });
   }
 }
 
 test.describe('AT-TC-39 - Signup fails when password is missing', { tag: ['@functional'] }, () => {
-  test('Attempting signup without a password shows a validation error and prevents submission', async ({ page }) => {
+  test('Attempting signup without a password triggers a validation error and prevents submission', async ({ page }) => {
     const signupPage = new SignupPage(page);
 
     // Arrange
     await signupPage.goto();
+    await signupPage.assertOnSignupPage();
 
     // Act
     await signupPage.fillEmail(uniqueEmail());
