@@ -3,15 +3,6 @@ import { expect, Locator, Page, test } from '@playwright/test';
 class MinimalSignupPage {
   constructor(private readonly page: Page) {}
 
-  private get nameTextbox(): Locator {
-    return this.page
-      .getByLabel(/^name$/i)
-      .or(this.page.getByPlaceholder(/^name$/i))
-      .or(this.page.getByRole('textbox', { name: /^name$/i }))
-      .or(this.page.getByLabel(/full name/i))
-      .or(this.page.getByPlaceholder(/full name/i));
-  }
-
   private get emailTextbox(): Locator {
     return this.page
       .getByLabel(/email/i)
@@ -28,12 +19,7 @@ class MinimalSignupPage {
       .or(this.page.getByPlaceholder(/^password$/i))
       .or(this.page.getByLabel(/password/i))
       .or(this.page.getByPlaceholder(/password/i))
-      .or(
-        this.page.locator(
-          'input[type="password"][autocomplete="new-password"], input[autocomplete="new-password"]',
-        ),
-      )
-      .or(this.page.locator('input[type="password"]'));
+      .or(this.page.locator('input[autocomplete="new-password"], input[type="password"]'));
   }
 
   private get confirmPasswordTextbox(): Locator {
@@ -44,7 +30,11 @@ class MinimalSignupPage {
           /confirm password|password confirmation|re-enter password|repeat password/i,
         ),
       )
-      .or(this.page.locator('input[name*="confirm" i][type="password"], input[id*="confirm" i][type="password"]'));
+      .or(
+        this.page.locator(
+          'input[name*="confirm" i][type="password"], input[id*="confirm" i][type="password"]',
+        ),
+      );
   }
 
   private get termsCheckbox(): Locator {
@@ -62,7 +52,11 @@ class MinimalSignupPage {
       .getByRole('button', { name: /log out|logout|sign out/i })
       .or(this.page.getByRole('link', { name: /log out|logout|sign out/i }))
       .or(this.page.getByRole('button', { name: /account|profile|user|menu/i }))
-      .or(this.page.locator('[data-testid*="avatar" i], [aria-label*="account" i], [aria-label*="profile" i]'));
+      .or(
+        this.page.locator(
+          '[data-testid*="avatar" i], [aria-label*="account" i], [aria-label*="profile" i]',
+        ),
+      );
   }
 
   private get greetingText(): Locator {
@@ -108,16 +102,11 @@ class MinimalSignupPage {
         await openSignupCta.first().click().catch(() => undefined);
       }
 
-      // Some apps render the form after hydration; wait for a stable, semantic marker.
+      // Prefer form-field readiness over a specific heading; many apps don't render a signup heading.
       await Promise.race([
         this.emailTextbox.first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => undefined),
         this.passwordTextbox.first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => undefined),
         this.submitButton.waitFor({ state: 'visible', timeout: 8000 }).catch(() => undefined),
-        this.page
-          .getByRole('heading', { name: /sign up|signup|create account|register/i })
-          .first()
-          .waitFor({ state: 'visible', timeout: 8000 })
-          .catch(() => undefined),
       ]);
 
       if (await this.emailTextbox.first().isVisible().catch(() => false)) return;
@@ -125,25 +114,19 @@ class MinimalSignupPage {
       if (await this.submitButton.isVisible().catch(() => false)) return;
     }
 
-    // Final fallback: ensure we are on a signup/register page rather than asserting a generic input.
+    // Final fallback: assert at least one expected control exists.
     await expect(
-      this.page.getByRole('heading', { name: /sign up|signup|create account|register/i }).first(),
+      this.emailTextbox.first().or(this.passwordTextbox.first()).or(this.submitButton),
     ).toBeVisible({ timeout: 15000 });
   }
 
   async assertSignupPageDisplayed(): Promise<void> {
-    const emailVisible = await this.emailTextbox.first().isVisible().catch(() => false);
-    if (emailVisible) await expect(this.emailTextbox.first()).toBeVisible();
+    await expect(this.emailTextbox.first()).toBeVisible();
     await expect(this.passwordTextbox.first()).toBeVisible();
     await expect(this.submitButton).toBeVisible();
   }
 
   async fillMinimalRequiredFields(params: { email: string; password: string }): Promise<void> {
-    // Minimal payload: do not fill optional fields.
-    if ((await this.nameTextbox.count().catch(() => 0)) > 0) {
-      // intentionally left blank
-    }
-
     await this.emailTextbox.first().fill(params.email);
     await this.passwordTextbox.first().fill(params.password);
 
@@ -168,7 +151,8 @@ class MinimalSignupPage {
   }
 
   async assertRedirectedToHome(): Promise<void> {
-    await expect(this.page).toHaveURL(/\/(home|dashboard)(\/|$)/i, { timeout: 20000 });
+    // Some apps land on /, /home, or /dashboard after signup.
+    await expect(this.page).toHaveURL(/\/(?:$|home(?:\/|$)|dashboard(?:\/|$))/i, { timeout: 20000 });
   }
 
   async assertAuthenticatedSessionEstablished(): Promise<void> {

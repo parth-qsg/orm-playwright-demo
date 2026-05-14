@@ -194,15 +194,6 @@ class AuthenticatedUi {
   }
 
   async assertLoggedIn(): Promise<void> {
-    // Many apps don't show an explicit "logout" button immediately after signup.
-    // The most reliable cross-app signal is that the login form is NOT shown.
-    await expect(
-      this.loginHeading.or(this.loginUsernameField),
-      'Login UI should not be visible when authenticated',
-    ).toHaveCount(0, { timeout: 15000 });
-
-    // Secondary (best-effort) indicator: if any common authenticated UI exists, it should be visible.
-    // Do not fail the test if the app simply doesn't render these elements.
     const loggedInIndicator = this.logoutButton
       .or(this.accountMenu)
       .or(this.dashboardHeading)
@@ -212,10 +203,15 @@ class AuthenticatedUi {
       .or(this.page.getByRole('img', { name: /avatar|profile|user/i }))
       .or(this.page.locator('[aria-label*="account" i], [aria-label*="profile" i], [aria-label*="user" i]'));
 
-    const indicatorCount = await loggedInIndicator.count();
-    if (indicatorCount > 0) {
-      await expect(loggedInIndicator.first()).toBeVisible({ timeout: 20000 });
-    }
+    // Primary assertion: some logged-in UI is visible.
+    await expect(
+      loggedInIndicator.first(),
+      'Expected a logged-in UI indicator (logout/account/dashboard/avatar) to be visible',
+    ).toBeVisible({ timeout: 20000 });
+
+    // Secondary assertion: login form should not be visible (some apps keep hidden login markup in DOM).
+    const loginUi = this.loginHeading.or(this.loginUsernameField);
+    await expect(loginUi, 'Login UI should not be visible when authenticated').toBeHidden({ timeout: 15000 });
   }
 }
 
