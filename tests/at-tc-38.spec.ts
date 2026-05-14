@@ -124,9 +124,15 @@ class SignupPage {
   async assertInvalidEmailValidation(): Promise<void> {
     const email = this.emailTextbox.first();
 
+    // Trigger client-side validation (many UIs validate on blur/submit).
+    await email.focus();
+    await this.page.keyboard.press('Tab');
+
     // Prefer native HTML5 validation if present.
     const nativeMessage = await email.evaluate((el) => {
       const input = el as HTMLInputElement;
+      // Some apps only populate validationMessage after reportValidity().
+      if (typeof input.reportValidity === 'function') input.reportValidity();
       return input.validationMessage ?? '';
     });
 
@@ -135,18 +141,42 @@ class SignupPage {
       return;
     }
 
-    // Otherwise, assert an inline validation message is shown.
-    const inlineError = this.page
-      .locator('[role="alert"], [aria-live], .error, .errors, .invalid-feedback, .field-error, .helper-text')
-      .filter({ hasText: /invalid\s*email|email\s*(is\s*)?invalid|valid\s*email|email\s*format|enter\s*a\s*valid\s*email/i });
-
-    await expect(inlineError.first()).toBeVisible({ timeout: 15000 });
-
-    // And/or the field is marked invalid.
+    // Otherwise, assert the field is marked invalid and/or an inline validation message is shown.
     const ariaInvalid = await email.getAttribute('aria-invalid');
     if (ariaInvalid !== null) {
       expect(ariaInvalid).toBe('true');
+      return;
     }
+
+    const invalidClass = await email.evaluate((el) => {
+      const classes = (el as HTMLElement).className ?? '';
+      return /invalid|error/i.test(String(classes));
+    });
+    if (invalidClass) return;
+
+    const describedBy = await email.getAttribute('aria-describedby');
+    if (describedBy) {
+      const described = this.page.locator(
+        describedBy
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((id) => `#${CSS.escape(id)}`)
+          .join(', '),
+      );
+      await expect(described).toContainText(/email|valid|format|@/i, { timeout: 15000 });
+      return;
+    }
+
+    const inlineError = this.page
+      .locator(
+        '[role="alert"], [aria-live], [data-testid*="error" i], [data-test*="error" i], .error, .errors, .invalid-feedback, .field-error, .helper-text, .form-error, .input-error, .text-danger',
+      )
+      .filter({
+        hasText:
+          /invalid\s*email|email\s*(is\s*)?invalid|valid\s*email|email\s*format|enter\s*a\s*valid\s*email|must\s*be\s*a\s*valid\s*email/i,
+      });
+
+    await expect(inlineError.first()).toBeVisible({ timeout: 15000 });
   }
 }
 

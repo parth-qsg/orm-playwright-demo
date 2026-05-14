@@ -194,12 +194,15 @@ class AuthenticatedUi {
   }
 
   async assertLoggedIn(): Promise<void> {
-    // Prefer a negative assertion: if the app kept the session, it should not show login UI.
-    // This is more portable than guessing a specific "logged-in" indicator across apps.
-    const loginUi = this.loginHeading.or(this.loginUsernameField);
-    await expect(loginUi, 'Login UI should not be visible when authenticated').toBeHidden({ timeout: 20000 });
+    // Avoid strict-mode violations by asserting each login element independently.
+    await expect(this.loginHeading, 'Login heading should not be visible when authenticated').toBeHidden({
+      timeout: 20000,
+    });
+    await expect(this.loginUsernameField, 'Login username/email field should not be visible when authenticated').toBeHidden({
+      timeout: 20000,
+    });
 
-    // If the app does expose a logged-in indicator, assert it as an additional signal.
+    // If the app exposes a logged-in indicator, assert it as an additional signal.
     const loggedInIndicator = this.logoutButton
       .or(this.accountMenu)
       .or(this.dashboardHeading)
