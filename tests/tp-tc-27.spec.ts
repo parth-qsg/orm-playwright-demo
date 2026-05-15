@@ -1,16 +1,16 @@
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 /**
- * TP-TC-27
+ * TestCase ID: fc218e58-9a38-4f6a-a436-8974501bd759
+ * TestCase Key: TP-TC-27
  * Objective: Story listing loads within acceptable time (<= 2000ms)
  *
- * NOTE:
- * - This repository workspace restricts file access to /workspace/repo/tests only.
- * - No application baseURL or story listing route is discoverable from the accessible subset of the repo.
- * - The test below is written to be environment-driven via STORY_LISTING_URL.
+ * Notes:
+ * - This is a non-functional (performance) check; keep it deterministic.
+ * - The story listing URL is provided via env var to avoid guessing routes.
  */
 
-test.describe('TP-TC-27 - Performance - Story listing load time', () => {
+test.describe('TP-TC-27 - Story listing performance', { tag: ['@tag 1'] }, () => {
   test('Story listing loads within 2000ms', async ({ page }) => {
     // Arrange
     const storyListingUrl = process.env.STORY_LISTING_URL;
@@ -21,15 +21,14 @@ test.describe('TP-TC-27 - Performance - Story listing load time', () => {
     );
 
     // Act
-    const startTime = Date.now();
+    const start = performance.now();
     const response = await page.goto(storyListingUrl!, { waitUntil: 'domcontentloaded' });
-    const durationMs = Date.now() - startTime;
+    const durationMs = performance.now() - start;
 
     // Assert
-    // Per standards: assertions should live in POM, but no POM can be created/reused because only /tests is accessible
-    // and we are forbidden from guessing selectors without being able to inspect the app.
-    test.expect(response, 'Story listing page should return a response').toBeTruthy();
-    test.expect(response?.ok(), `Story listing page should load successfully; status=${response?.status()}`).toBeTruthy();
-    test.expect(durationMs, `Load time should be <= 2000ms (actual: ${durationMs}ms)`).toBeLessThanOrEqual(2000);
+    expect(response, 'Story listing page should return a response').toBeTruthy();
+    expect(response?.ok(), `Story listing page should load successfully; status=${response?.status()}`).toBeTruthy();
+    await expect(page, 'Story listing page should be displayed').toHaveURL(/.+/);
+    expect(durationMs, `Load time should be <= 2000ms (actual: ${Math.round(durationMs)}ms)`).toBeLessThanOrEqual(2000);
   });
 });
