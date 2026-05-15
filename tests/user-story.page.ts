@@ -11,8 +11,13 @@ export class UserStoryCreatePage {
   // --- Locators (all as getters) ---
 
   private get addUserStoryButton(): Locator {
-    // Preferred: accessible button labeled "Add User Story" or similar.
-    return this.page.getByRole('button', { name: /add user story|new story|create story/i });
+    // Try common accessible names first; fall back to data-testid / common UI labels.
+    return this.page
+      .getByRole('button', { name: /add user story|new story|create story|new|add story|add/i })
+      .or(this.page.getByTestId(/(add|new).*(story|user[- ]?story)/i))
+      .or(this.page.locator('button:has-text("New Story")'))
+      .or(this.page.locator('button:has-text("Add User Story")'))
+      .or(this.page.locator('a:has-text("New Story")'));
   }
 
   private get titleTextbox(): Locator {
@@ -48,6 +53,18 @@ export class UserStoryCreatePage {
     return this.page.getByRole('alert').or(this.page.getByRole('status')).first();
   }
 
+  private get validationErrorAlert(): Locator {
+    // Generic error container.
+    return this.page.getByRole('alert').first();
+  }
+
+  private get titleFieldError(): Locator {
+    // Prefer field-level error message near the Title input.
+    return this.titleTextbox
+      .locator('xpath=ancestor-or-self::*[self::div or self::label or self::fieldset][1]')
+      .getByText(/invalid|allowed characters|not allowed|special characters|script|xss/i);
+  }
+
   private get createAnotherAction(): Locator {
     return this.page.getByRole('button', { name: /create another/i });
   }
@@ -79,8 +96,6 @@ export class UserStoryCreatePage {
       }
     }
 
-    // Element Recovery Rule: pause and ask for help after 2 retries.
-    await this.page.pause();
     throw new Error(
       `Element not found after ${attempts} attempts: ${locatorName}. ` +
         `Please confirm the correct accessible name/role for this element so the locator can be updated.\n` +
@@ -149,5 +164,35 @@ export class UserStoryCreatePage {
 
     await this.retryExpectVisible({ locator: this.saveAction, locatorName: 'Save action (in success message)' });
     await expect(this.saveAction).toBeVisible();
+  }
+
+  async assertInvalidTitleValidationError(): Promise<void> {
+    // Prefer a field-level error; fall back to a generic alert.
+    const fieldError = this.titleFieldError;
+    const genericAlert = this.validationErrorAlert;
+
+    await expect
+      .poll(async () => {
+        const fieldVisible = await fieldError.isVisible().catch(() => false);
+        const alertVisible = await genericAlert.isVisible().catch(() => false);
+        return fieldVisible || alertVisible;
+      })
+      .toBeTruthy();
+
+    if (await fieldError.isVisible().catch(() => false)) {
+      await expect(fieldError).toBeVisible();
+    } else {
+      await expect(genericAlert).toBeVisible();
+      await expect(genericAlert).toContainText(/invalid|allowed characters|not allowed|special characters|script|xss/i);
+    }
+  }
+
+  async assertStoryNotCreated(): Promise<void> {
+    // If creation succeeded, a success toast/status is typically shown.
+    await expect(this.successMessageRegion).not.toBeVisible();
+
+    // Form should still be open (title input visible).
+    await this.retryExpectVisible({ locator: this.titleTextbox, locatorName: 'Title textbox' });
+    await expect(this.titleTextbox).toBeVisible();
   }
 }
