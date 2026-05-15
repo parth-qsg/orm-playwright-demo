@@ -22,7 +22,9 @@ export class OrangeHrmLoginPage {
   }
 
   private get loginHeading(): Locator {
-    return this.page.getByRole('heading', { name: 'Login' });
+    // OrangeHRM login page heading can vary by theme/version (e.g., "Login" or "Login Panel").
+    // Use a resilient locator that still asserts we're on the login screen.
+    return this.page.getByRole('heading', { name: /login/i });
   }
 
   private get usernameTextbox(): Locator {
