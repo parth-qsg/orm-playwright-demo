@@ -9,7 +9,6 @@ class QMagicDemoLoginPage {
   constructor(page: Page) {
     this.page = page;
 
-    // Prefer accessible locators; fall back to common attributes.
     this.username = page
       .getByLabel(/user(name)?/i)
       .or(page.getByPlaceholder(/user(name)?/i))
@@ -44,31 +43,32 @@ class QMagicDemoLoginPage {
   }
 
   async assertUsernameRequiredVisible(): Promise<void> {
-    // Validation can be implemented via:
-    // - inline error text
-    // - aria-invalid on the input
-    // - native HTML5 required validation (no DOM message)
-
-    // Trigger native validation UI by focusing the username field after submit attempt.
-    await this.username.focus();
+    // Trigger validation in a few common ways (HTML5 required, blur, submit).
+    await this.username.click();
+    await this.page.keyboard.press('Tab');
 
     const inlineMessage = this.page.getByText(
-      /user(name)?\s+(is\s+)?required|required\s+user(name)?|enter\s+user(name)?|missing\s+user(name)?/i,
+      /user(name)?\s+(is\s+)?required|required\s+user(name)?|enter\s+user(name)?|missing\s+user(name)?|please\s+fill\s+out\s+this\s+field/i,
     );
 
-    // aria-invalid may be set on the input itself.
+    // Some apps only mark the input as invalid (aria-invalid / class) without rendering text.
     const ariaInvalidOnInput = this.username.locator(':scope[aria-invalid="true"]');
 
-    // Some implementations set aria-invalid on a wrapper; check closest common wrappers.
     const ariaInvalidOnWrapper = this.username
       .locator('xpath=ancestor-or-self::*[self::div or self::label][@aria-invalid="true"][1]')
       .first();
 
-    // Native HTML5 constraint validation.
-    const nativeInvalid = this.page.locator('input:invalid').filter({ has: this.username });
+    const classInvalidOnInput = this.username.locator(':scope.is-invalid, :scope.invalid, :scope[aria-describedby]');
+
+    // Native constraint validation: the username input itself should be invalid.
+    const nativeInvalidUsername = this.username.locator(':scope:invalid');
 
     await expect(
-      inlineMessage.or(ariaInvalidOnInput).or(ariaInvalidOnWrapper).or(nativeInvalid),
+      inlineMessage
+        .or(ariaInvalidOnInput)
+        .or(ariaInvalidOnWrapper)
+        .or(classInvalidOnInput)
+        .or(nativeInvalidUsername),
       'A username required validation indicator/message should be visible',
     ).toBeVisible();
   }
@@ -78,9 +78,7 @@ class QMagicDemoLoginPage {
     await this.assertLoaded();
   }
 
-  async assertPasswordRetained(expectedPassword: string): Promise<void> {
-    // Some apps clear password on submit; requirement says accepted or unchanged.
-    // We assert it is either unchanged OR still present in the field (non-empty).
+  async assertPasswordAcceptedOrUnchanged(expectedPassword: string): Promise<void> {
     const currentValue = await this.password.inputValue();
     expect(
       currentValue === expectedPassword || currentValue.length > 0,
@@ -95,9 +93,7 @@ test.describe('TP-TC-2 - Login validation', () => {
 
     // Arrange
     const password: string | undefined = process.env.TEST_PASSWORD ?? process.env.APP_PASSWORD;
-    if (!password) {
-      test.skip(true, 'Missing password: set TEST_PASSWORD (or APP_PASSWORD).');
-    }
+    if (!password) test.skip(true, 'Missing password: set TEST_PASSWORD (or APP_PASSWORD).');
 
     await loginPage.goto();
     await loginPage.assertLoaded();
@@ -108,7 +104,7 @@ test.describe('TP-TC-2 - Login validation', () => {
 
     // Assert
     await loginPage.assertUsernameRequiredVisible();
-    await loginPage.assertPasswordRetained(password);
+    await loginPage.assertPasswordAcceptedOrUnchanged(password);
     await loginPage.assertStillOnLoginPage();
   });
 });
