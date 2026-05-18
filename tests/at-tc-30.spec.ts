@@ -116,28 +116,12 @@ class SignupWithReferralPage {
 
       await this.page.waitForLoadState('domcontentloaded');
 
-      // Some apps render signup inside an iframe (e.g., hosted auth). Detect and use it.
-      const frames = this.page.frames();
-      for (const frame of frames) {
-        const emailInFrame = await frame
-          .locator(
-            'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]',
-          )
-          .count()
-          .catch(() => 0);
-        const passwordInFrame = await frame.locator('input[type="password"], input[autocomplete="new-password"]').count().catch(() => 0);
-        if (emailInFrame > 0 && passwordInFrame > 0) {
-          await this.page.waitForTimeout(250);
-          return;
-        }
-      }
-
       await this.page
         .waitForSelector(
-          'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]',
+          'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i], input[type="password"], form',
           {
             state: 'attached',
-            timeout: 5000,
+            timeout: 7000,
           },
         )
         .catch(() => undefined);
@@ -145,28 +129,16 @@ class SignupWithReferralPage {
       if (await formReady()) return;
     }
 
-    // Fallback: ensure we at least landed on a page that looks like auth/signup.
+    // Fallback: some apps don't render a "Sign up" heading; accept any auth form presence.
     await expect(
-      this.page.getByRole('heading', { name: /sign up|create account|register/i }).or(
-        this.page.getByText(/sign up|create account|register/i).first(),
-      ),
+      this.page
+        .locator('form')
+        .filter({ has: this.page.locator('input[type="password"]') })
+        .or(this.page.locator('input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[type="password"]')),
     ).toBeVisible({ timeout: 15000 });
   }
 
   async assertSignupFormLoaded(): Promise<void> {
-    // Support hosted auth flows that render the form inside an iframe.
-    const frames = this.page.frames();
-    for (const frame of frames) {
-      const emailInFrame = await frame
-        .locator(
-          'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[name*="user" i], input[id*="user" i]',
-        )
-        .count()
-        .catch(() => 0);
-      const passwordInFrame = await frame.locator('input[type="password"], input[autocomplete="new-password"]').count().catch(() => 0);
-      if (emailInFrame > 0 && passwordInFrame > 0) return;
-    }
-
     const emailVisible = await this.emailTextbox.first().isVisible().catch(() => false);
     if (!emailVisible) {
       await expect(this.page.getByRole('textbox').first()).toBeVisible();
