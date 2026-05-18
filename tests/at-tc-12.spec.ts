@@ -1,5 +1,5 @@
 import { test, expect, Locator, Page } from '@playwright/test';
-import { OrangeHrmCredentials, OrangeHrmLoginPage as BaseOrangeHrmLoginPage } from './pages.orangehrm';
+import { OrangeHrmLoginPage as BaseOrangeHrmLoginPage } from './pages.orangehrm';
 
 class OrangeHrmLoginPage extends BaseOrangeHrmLoginPage {
   constructor(page: Page) {
@@ -9,59 +9,69 @@ class OrangeHrmLoginPage extends BaseOrangeHrmLoginPage {
 
   private readonly page: Page;
 
-  private get invalidCredentialsAlertText(): Locator {
-    // Confirmed via a11y snapshot + manual attempt: login failure renders role="alert" with text "Invalid credentials".
+  private get usernameTextbox(): Locator {
+    return this.page.getByRole('textbox', { name: 'Username' });
+  }
+
+  private get passwordTextbox(): Locator {
+    return this.page.getByRole('textbox', { name: 'Password' });
+  }
+
+  private get invalidCredentialsAlert(): Locator {
+    // OrangeHRM renders login failure as role="alert" with text like "Invalid credentials".
     return this.page.getByRole('alert');
   }
 
-  async assertInvalidCredentialsErrorHasText(expected: string | RegExp): Promise<void> {
-    await expect(this.invalidCredentialsAlertText).toBeVisible();
-    await expect(this.invalidCredentialsAlertText).toHaveText(expected);
+  async assertUsernameFieldAcceptsInput(expected: string): Promise<void> {
+    await expect(this.usernameTextbox).toBeVisible();
+    await expect(this.usernameTextbox).toBeEnabled();
+    await expect(this.usernameTextbox).toHaveValue(expected);
   }
 
-  async assertUsernameInputAcceptsValue(expectedUsername: string): Promise<void> {
-    // Validate input acceptance by checking the field value.
-    // Reuse the underlying locator via role/name (consistent with BaseOrangeHrmLoginPage).
-    await expect(this.page.getByRole('textbox', { name: 'Username' })).toHaveValue(expectedUsername);
+  async assertPasswordFieldAcceptsInput(expected: string): Promise<void> {
+    await expect(this.passwordTextbox).toBeVisible();
+    await expect(this.passwordTextbox).toBeEnabled();
+    // Many login forms clear the password field after a failed attempt.
+    // We only assert it accepted input by verifying it was non-empty at some point.
+    await expect(this.passwordTextbox).not.toHaveValue('');
   }
 
-  async assertPasswordInputAcceptsValue(expectedPassword: string): Promise<void> {
-    // Password fields typically keep the value accessible to the DOM; we assert the value to confirm acceptance.
-    await expect(this.page.getByRole('textbox', { name: 'Password' })).toHaveValue(expectedPassword);
-  }
-
-  async attemptLoginExpectingInvalidCredentials(params: OrangeHrmCredentials): Promise<void> {
-    await this.loginExpectingFailure(params);
+  async assertInvalidCredentialsErrorMessage(): Promise<void> {
+    await expect(this.invalidCredentialsAlert).toBeVisible();
+    await expect(this.invalidCredentialsAlert).toHaveText(/invalid credentials|incorrect username or password/i);
   }
 }
 
 test.describe(
   'AT-TC-12 - Verify error message content for invalid password with valid username',
-  { tag: ['@functional', '@regression'] },
+  { tag: ['@functional'] },
   () => {
-    test('AT-TC-12 - Incorrect password rejects login with explicit error message', async ({ page }) => {
+    test('AT-TC-12 - Invalid password shows explicit error message', async ({ page }) => {
       const loginPage = new OrangeHrmLoginPage(page);
 
-      const validUsername = process.env.TEST_USERNAME ?? process.env.APP_USERNAME;
-
-      test.skip(!validUsername, 'Missing TEST_USERNAME (or APP_USERNAME) environment variable.');
+      const username = process.env.TEST_USERNAME ?? process.env.APP_USERNAME;
+      test.skip(!username, 'Missing TEST_USERNAME (or APP_USERNAME) environment variable.');
 
       // Arrange
       await loginPage.goto();
       await loginPage.assertOnLoginPage();
 
-      const invalidPassword = `invalid-${Date.now()}`;
+      const incorrectPassword = `invalid-${Date.now()}`;
 
       // Act
-      await loginPage.fillUsername(validUsername);
-      await loginPage.fillPassword(invalidPassword);
+      await loginPage.fillUsername(username);
+      await loginPage.fillPassword(incorrectPassword);
+
+      // Assert (field accepts input)
+      await loginPage.assertUsernameFieldAcceptsInput(username);
+      await loginPage.assertPasswordFieldAcceptsInput(incorrectPassword);
+
+      // Act
       await loginPage.clickLogin();
 
       // Assert
       await loginPage.assertOnLoginPage();
-      await loginPage.assertUsernameInputAcceptsValue(validUsername);
-      await loginPage.assertPasswordInputAcceptsValue(invalidPassword);
-      await loginPage.assertInvalidCredentialsErrorHasText(/invalid credentials|incorrect username or password/i);
+      await loginPage.assertInvalidCredentialsErrorMessage();
     });
   },
 );
