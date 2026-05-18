@@ -19,26 +19,24 @@ function getAuthEnv(): AuthEnv {
   return { username, password };
 }
 
-test.describe(
-  'AT-TC-23 - Secure error messaging on incorrect password',
-  { tag: ['@functional', '@secure'] },
-  () => {
-    test('Authentication fails with secure, non-revealing error messaging', async ({ page }) => {
-      const loginPage = new OrangeHrmLoginPage(page);
-      const { username, password } = getAuthEnv();
+test.describe('AT-TC-23 - Secure error messaging on incorrect password', {
+  tag: ['@functional', '@secure'],
+}, () => {
+  test('Authentication fails with secure, non-revealing error messaging', async ({ page }) => {
+    const loginPage = new OrangeHrmLoginPage(page);
+    const { username, password } = getAuthEnv();
 
-      // Arrange
-      await loginPage.goto();
-      await loginPage.assertOnLoginPage();
+    // Arrange
+    await loginPage.goto();
+    await loginPage.assertOnLoginPage();
 
-      // Act
-      await loginPage.fillUsername(username);
-      await loginPage.fillPassword(`${password}-incorrect`);
-      await loginPage.clickLogin();
+    // Act
+    await loginPage.fillUsername(username);
+    await loginPage.fillPassword(`${password}-incorrect`);
+    await loginPage.clickLogin();
 
-      // Assert
-      await loginPage.assertOnLoginPage();
-      await loginPage.assertSecureInvalidCredentialsMessageVisible();
-    });
-  },
-);
+    // Assert
+    await loginPage.assertOnLoginPage();
+    await loginPage.assertSecureInvalidCredentialsMessageVisible();
+  });
+});
