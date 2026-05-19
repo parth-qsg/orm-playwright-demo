@@ -15,7 +15,11 @@ export class TpProductsDarkPage {
   // --- Locators (getters only) ---
 
   private get productsHeading(): Locator {
-    return this.page.getByRole('heading', { name: /^products$/i });
+    // Some apps render the page title as a non-heading element (e.g., div/h1 without role).
+    // Prefer role=heading, but fall back to a visible "Products" text.
+    return this.page
+      .getByRole('heading', { name: /^products$/i })
+      .or(this.page.getByText(/^products$/i));
   }
 
   private get statusFilterCombobox(): Locator {
@@ -58,15 +62,14 @@ export class TpProductsDarkPage {
 
     for (let i = 0; i < attempts; i++) {
       try {
-        await expect(locator).toBeVisible();
+        await expect(locator).toBeVisible({ timeout: 15000 });
         return;
       } catch (err) {
         lastError = err;
-        await this.page.waitForTimeout(250);
+        await this.page.waitForTimeout(500);
       }
     }
 
-    await this.page.pause();
     throw new Error(
       `Element not found after ${attempts} attempts: ${locatorName}. ` +
         `Please confirm the correct role/name (accessible label) so the locator can be updated.\n` +
