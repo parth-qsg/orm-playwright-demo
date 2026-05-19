@@ -12,10 +12,16 @@ export class UserStoryCreatePage {
 
   private get addUserStoryButton(): Locator {
     // Try common accessible names first; fall back to data-testid / common UI labels.
+    // Include "Add Story" and generic "New" buttons/links.
     return this.page
-      .getByRole('button', { name: /add user story|new story|create story|new|add story|add/i })
-      .or(this.page.getByTestId(/(add|new).*(story|user[- ]?story)/i))
+      .getByRole('button', { name: /add user story|new story|create story|add story|add|new/i })
+      .or(this.page.getByRole('link', { name: /add user story|new story|create story|add story|add|new/i }))
+      .or(this.page.getByTestId(/(add|new|create).*(story|user[- ]?story)/i))
+      .or(this.page.locator('[data-testid*="story" i]:is(button,a)'))
+      .or(this.page.locator('button:has-text("New")'))
+      .or(this.page.locator('a:has-text("New")'))
       .or(this.page.locator('button:has-text("New Story")'))
+      .or(this.page.locator('button:has-text("Add Story")'))
       .or(this.page.locator('button:has-text("Add User Story")'))
       .or(this.page.locator('a:has-text("New Story")'));
   }
