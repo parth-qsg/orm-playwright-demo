@@ -43,34 +43,29 @@ class QMagicDemoLoginPage {
   }
 
   async assertUsernameRequiredVisible(): Promise<void> {
-    // Trigger validation in a few common ways (HTML5 required, blur, submit).
-    await this.username.click();
+    // Many apps rely on HTML5 constraint validation without rendering an inline message.
+    // Assert deterministically that the username input is invalid/required after submit.
+
+    // Ensure the field is empty and trigger validation.
+    await this.username.fill('');
+    await this.username.focus();
     await this.page.keyboard.press('Tab');
 
-    const inlineMessage = this.page.getByText(
+    // Prefer native validity state (works even when no message is rendered).
+    const isInvalid = await this.username.evaluate((el) => {
+      const input = el as HTMLInputElement;
+      if (typeof input.checkValidity === 'function') return !input.checkValidity();
+      const ariaInvalid = input.getAttribute('aria-invalid');
+      return ariaInvalid === 'true';
+    });
+
+    expect(isInvalid, 'Username field should be invalid when left empty').toBeTruthy();
+
+    // If the app does render a message, accept either common text or browser default.
+    const possibleMessage = this.page.getByText(
       /user(name)?\s+(is\s+)?required|required\s+user(name)?|enter\s+user(name)?|missing\s+user(name)?|please\s+fill\s+out\s+this\s+field/i,
     );
-
-    // Some apps only mark the input as invalid (aria-invalid / class) without rendering text.
-    const ariaInvalidOnInput = this.username.locator(':scope[aria-invalid="true"]');
-
-    const ariaInvalidOnWrapper = this.username
-      .locator('xpath=ancestor-or-self::*[self::div or self::label][@aria-invalid="true"][1]')
-      .first();
-
-    const classInvalidOnInput = this.username.locator(':scope.is-invalid, :scope.invalid, :scope[aria-describedby]');
-
-    // Native constraint validation: the username input itself should be invalid.
-    const nativeInvalidUsername = this.username.locator(':scope:invalid');
-
-    await expect(
-      inlineMessage
-        .or(ariaInvalidOnInput)
-        .or(ariaInvalidOnWrapper)
-        .or(classInvalidOnInput)
-        .or(nativeInvalidUsername),
-      'A username required validation indicator/message should be visible',
-    ).toBeVisible();
+    await possibleMessage.waitFor({ state: 'visible', timeout: 1500 }).catch(() => undefined);
   }
 
   async assertStillOnLoginPage(): Promise<void> {
@@ -80,10 +75,8 @@ class QMagicDemoLoginPage {
 
   async assertPasswordAcceptedOrUnchanged(expectedPassword: string): Promise<void> {
     const currentValue = await this.password.inputValue();
-    expect(
-      currentValue === expectedPassword || currentValue.length > 0,
-      'Password should be accepted or remain unchanged in the field',
-    ).toBeTruthy();
+    expect(currentValue.length > 0, 'Password should be accepted or remain unchanged in the field').toBeTruthy();
+    expect(currentValue, 'Password should not be cleared after failed login').toBe(expectedPassword);
   }
 }
 
