@@ -82,18 +82,26 @@ class LeftNavProfileMenu {
   get profileMenuButton(): Locator {
     // Left-nav profile trigger is often an icon-only button (no accessible name).
     // Prefer explicit names, but fall back to common patterns used for avatar/profile triggers.
-    const nav = this.page.getByRole('navigation');
+    // Previous attempt scoped too tightly to role=navigation; some apps render the left rail as an <aside>/<div>.
 
-    return nav
+    const named = this.page
       .getByRole('button', { name: /profile|account|avatar|user|me/i })
-      .or(nav.getByRole('link', { name: /profile|account|avatar|user|me/i }))
-      .or(this.page.getByRole('button', { name: /profile|account|avatar|user|me/i }))
-      .or(this.page.getByRole('link', { name: /profile|account|avatar|user|me/i }))
-      // icon-only triggers
-      .or(nav.locator('button:has(img), button:has(svg)').first())
-      .or(nav.locator('[aria-haspopup="menu"], [aria-expanded]').first())
-      .or(nav.locator('[data-testid*="profile" i], [data-testid*="account" i], [data-testid*="avatar" i]').first())
+      .or(this.page.getByRole('link', { name: /profile|account|avatar|user|me/i }));
+
+    const byTestId = this.page
+      .locator(
+        '[data-testid*="profile" i], [data-testid*="account" i], [data-testid*="avatar" i], [data-testid*="user" i]',
+      )
+      .filter({ has: this.page.locator('img, svg') })
       .first();
+
+    const byAria = this.page
+      .locator('button[aria-haspopup="menu"], button[aria-expanded], [aria-haspopup="menu"][role="button"]')
+      .first();
+
+    const iconButton = this.page.locator('button:has(img), button:has(svg)').first();
+
+    return named.or(byTestId).or(byAria).or(iconButton).first();
   }
 
   private get logoutItem(): Locator {
