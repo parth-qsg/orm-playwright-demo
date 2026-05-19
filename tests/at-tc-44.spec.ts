@@ -80,13 +80,19 @@ class LeftNavProfileMenu {
   constructor(private readonly page: Page) {}
 
   get profileMenuButton(): Locator {
-    // Prefer explicit "Profile" button in left nav, but fall back to common avatar/account triggers.
-    return this.page
-      .getByRole('navigation')
+    // Left-nav profile trigger is often an icon-only button (no accessible name).
+    // Prefer explicit names, but fall back to common patterns used for avatar/profile triggers.
+    const nav = this.page.getByRole('navigation');
+
+    return nav
       .getByRole('button', { name: /profile|account|avatar|user|me/i })
+      .or(nav.getByRole('link', { name: /profile|account|avatar|user|me/i }))
       .or(this.page.getByRole('button', { name: /profile|account|avatar|user|me/i }))
-      .or(this.page.getByRole('img', { name: /profile|account|avatar|user|me/i }))
-      .or(this.page.getByLabel(/profile|account|avatar|user|me/i))
+      .or(this.page.getByRole('link', { name: /profile|account|avatar|user|me/i }))
+      // icon-only triggers
+      .or(nav.locator('button:has(img), button:has(svg)').first())
+      .or(nav.locator('[aria-haspopup="menu"], [aria-expanded]').first())
+      .or(nav.locator('[data-testid*="profile" i], [data-testid*="account" i], [data-testid*="avatar" i]').first())
       .first();
   }
 
@@ -97,8 +103,6 @@ class LeftNavProfileMenu {
   }
 
   async open(): Promise<void> {
-    // Apps differ in whether the left nav is exposed as role=navigation.
-    // Wait for a stable, user-facing trigger instead of asserting the nav role exists.
     await expect(this.profileMenuButton).toBeVisible({ timeout: 15000 });
     await this.profileMenuButton.click();
     await expect(this.logoutItem).toBeVisible({ timeout: 15000 });
