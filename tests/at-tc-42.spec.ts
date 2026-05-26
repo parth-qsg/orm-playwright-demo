@@ -200,39 +200,28 @@ class AuthenticatedUi {
       .or(this.page.locator('input[name="email"], input#email, input[type="email"], input[autocomplete="email"]'));
   }
 
-  private get loginButtonOrLink(): Locator {
-    return this.page
-      .getByRole('button', { name: /log in|login|sign in/i })
-      .or(this.page.getByRole('link', { name: /log in|login|sign in/i }));
-  }
-
   async assertAuthenticated(): Promise<void> {
-    await this.assertNotOnAuthScreens();
+    // Some apps briefly navigate through auth/validate and may land on login when not authenticated.
+    // Make the assertion deterministic by waiting for either an authenticated marker OR a login marker,
+    // then asserting we are in the authenticated state.
+    const authenticatedMarker = this.logoutButton.or(this.accountMenu).or(this.dashboardHeading);
+    const unauthenticatedMarker = this.loginHeading.or(this.loginUsernameField).or(this.signupHeading).or(this.signupEmailField);
 
-    const authedAffordance = this.logoutButton.or(this.accountMenu).or(this.dashboardHeading);
-    if (await authedAffordance.first().isVisible().catch(() => false)) {
-      await expect(authedAffordance.first()).toBeVisible({ timeout: 20000 });
-    }
+    await Promise.race([
+      authenticatedMarker.first().waitFor({ state: 'visible', timeout: 30000 }),
+      unauthenticatedMarker.first().waitFor({ state: 'visible', timeout: 30000 }),
+    ]);
 
-    if (await this.loginButtonOrLink.isVisible().catch(() => false)) {
-      await expect(this.loginButtonOrLink).toBeHidden();
-    }
-  }
-
-  async assertNotOnAuthScreens(): Promise<void> {
-    const authUi = this.loginHeading.or(this.loginUsernameField).or(this.signupHeading).or(this.signupEmailField);
-    // `.or()` can resolve to multiple elements; strict assertions like toBeHidden() will fail.
-    await expect(authUi.first()).toBeHidden({ timeout: 20000 });
+    await expect(authenticatedMarker).toBeVisible({ timeout: 5000 });
+    await expect(unauthenticatedMarker).toBeHidden({ timeout: 5000 });
   }
 }
 
-test.describe('AT-TC-42 - Verify user remains logged in after refreshing the page post-signup', {
-  tag: ['@functional', '@regression'],
-}, () => {
-  test('User remains authenticated after refresh post-signup', async ({ page }) => {
+test.describe('AT-TC-42: Verify user remains logged in after refreshing the page post-signup', () => {
+  test('User remains authenticated after refresh', async ({ page }) => {
     // Arrange
     const signupPage = new SignupPage(page);
-    const authed = new AuthenticatedUi(page);
+    const authenticatedUi = new AuthenticatedUi(page);
 
     const email = uniqueEmail();
     const password = getSignupPassword();
@@ -243,13 +232,12 @@ test.describe('AT-TC-42 - Verify user remains logged in after refreshing the pag
     await signupPage.submit();
 
     // Assert (post-signup)
-    await authed.assertAuthenticated();
+    await authenticatedUi.assertAuthenticated();
 
     // Act (refresh)
     await page.reload({ waitUntil: 'domcontentloaded' });
 
     // Assert (still authenticated)
-    await authed.assertAuthenticated();
-    await authed.assertNotOnAuthScreens();
+    await authenticatedUi.assertAuthenticated();
   });
 });
