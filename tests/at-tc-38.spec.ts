@@ -6,6 +6,15 @@ function getBaseUrl(): string {
   return baseUrl!.replace(/\/$/, '');
 }
 
+function getTestPassword(): string {
+  return (
+    process.env.TEST_PASSWORD ??
+    process.env.APP_PASSWORD ??
+    // Non-secret fallback for negative validation test.
+    'ValidPassword123!'
+  );
+}
+
 class SignupPage {
   constructor(private readonly page: Page) {}
 
@@ -198,7 +207,7 @@ test.describe('AT-TC-38 - Enforce proper email format during signup', { tag: ['@
 
     // Act
     await signupPage.fillEmail('invalid-email-format');
-    await signupPage.fillPassword('ValidPassword123!');
+    await signupPage.fillPassword(getTestPassword());
     await signupPage.submit();
 
     // Assert

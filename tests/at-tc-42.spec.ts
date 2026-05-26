@@ -207,24 +207,22 @@ class AuthenticatedUi {
   }
 
   async assertAuthenticated(): Promise<void> {
-    // Some apps don't expose a dedicated logout/account control immediately after signup.
-    // A robust signal of authentication is that we are NOT on login/signup screens.
     await this.assertNotOnAuthScreens();
 
-    // If the app does show an authenticated affordance, assert it when present.
     const authedAffordance = this.logoutButton.or(this.accountMenu).or(this.dashboardHeading);
     if (await authedAffordance.first().isVisible().catch(() => false)) {
       await expect(authedAffordance.first()).toBeVisible({ timeout: 20000 });
     }
 
-    // Login CTA should not be visible in authenticated state.
     if (await this.loginButtonOrLink.isVisible().catch(() => false)) {
       await expect(this.loginButtonOrLink).toBeHidden();
     }
   }
 
   async assertNotOnAuthScreens(): Promise<void> {
-    await expect(this.loginHeading.or(this.loginUsernameField).or(this.signupHeading).or(this.signupEmailField)).toBeHidden();
+    const authUi = this.loginHeading.or(this.loginUsernameField).or(this.signupHeading).or(this.signupEmailField);
+    // `.or()` can resolve to multiple elements; strict assertions like toBeHidden() will fail.
+    await expect(authUi.first()).toBeHidden({ timeout: 20000 });
   }
 }
 
